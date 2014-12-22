@@ -5558,7 +5558,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				return 0;
 			}
 			memset(data, 0, allocation_len);
 			/* PERIPHERAL QUALIFIER(7-5) PERIPHERAL DEVICE TYPE(4-0) */
@@ -5643,14 +5643,14 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 		if (lu_cmd->R_bit == 0) {
 			ISTGT_ERRLOG("R_bit == 0\n");
 			lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-			return -1;
+			break;
 		}
 		allocation_len = DGET16(&cdb[3]);
 		if (allocation_len > (size_t) data_alloc_len) {
 			ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 			    data_alloc_len);
 			lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-			return -1;
+			break;
 		}
 		memset(data, 0, allocation_len);
 		data_len = istgt_lu_disk_scsi_inquiry(spec, conn, cdb,
@@ -5671,7 +5671,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			ISTGT_TRACELOG(ISTGT_TRACE_SCSI, "REPORT LUNS\n");
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
-				return -1;
+				break;
 			}
 
 			sel = cdb[2];
@@ -5682,7 +5682,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			if (allocation_len < 16) {
 				/* INVALID FIELD IN CDB */
@@ -5740,7 +5740,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 		if (lu_cmd->R_bit == 0) {
 			ISTGT_ERRLOG("R_bit == 0\n");
 			lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-			return -1;
+			break;
 		}
 		if (spec->blockcnt - 1 > 0xffffffffULL) {
 			DSET32(&data[0], 0xffffffffUL);
@@ -5762,14 +5762,14 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			allocation_len = DGET32(&cdb[10]);
 			if (allocation_len > (size_t) data_alloc_len) {
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 			DSET64(&data[0], spec->blockcnt - 1);
@@ -5942,7 +5942,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			dbd = BGET8(&cdb[1], 3);
@@ -5955,7 +5955,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 
@@ -5993,7 +5993,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			llbaa = BGET8(&cdb[1], 4);
@@ -6007,7 +6007,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 
@@ -6041,7 +6041,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			desc = BGET8(&cdb[1], 0);
@@ -6057,7 +6057,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 
@@ -6101,7 +6101,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			lba = (uint64_t) (DGET24(&cdb[1]) & 0x001fffffU);
@@ -6146,7 +6146,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if ((lu_cmd->R_bit == 0) && (transfer_len > 0)) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			rc = istgt_lu_disk_lbread(spec, conn, lu_cmd, lba, transfer_len);
@@ -6183,7 +6183,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if ((lu_cmd->R_bit == 0) && (transfer_len > 0)) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			rc = istgt_lu_disk_lbread(spec, conn, lu_cmd, lba, transfer_len);
@@ -6220,7 +6220,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if ((lu_cmd->R_bit == 0) && (transfer_len > 0)) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			rc = istgt_lu_disk_lbread(spec, conn, lu_cmd, lba, transfer_len);
@@ -6246,7 +6246,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->W_bit == 0) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			lba = (uint64_t) (DGET24(&cdb[1]) & 0x001fffffU);
@@ -6292,7 +6292,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if ((lu_cmd->W_bit == 0) && (transfer_len > 0)) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			rc = istgt_lu_disk_lbwrite(spec, conn, lu_cmd, lba, transfer_len);
@@ -6330,7 +6330,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if ((lu_cmd->W_bit == 0) && (transfer_len > 0)) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			rc = istgt_lu_disk_lbwrite(spec, conn, lu_cmd, lba, transfer_len);
@@ -6368,7 +6368,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if ((lu_cmd->W_bit == 0) && (transfer_len > 0)) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			rc = istgt_lu_disk_lbwrite(spec, conn, lu_cmd, lba, transfer_len);
@@ -6468,7 +6468,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->W_bit == 0) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			wprotect = BGET8W(&cdb[1], 7, 3);
@@ -6517,7 +6517,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->W_bit == 0) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			wprotect = BGET8W(&cdb[1], 7, 3);
@@ -6581,7 +6581,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->W_bit == 0) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			wprotect = BGET8W(&cdb[1], 7, 3);
@@ -6692,7 +6692,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			req_plist = BGET8(&cdb[2], 4);
@@ -6704,7 +6704,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 
@@ -6726,7 +6726,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			req_plist = BGET8(&cdb[2], 4);
@@ -6738,7 +6738,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 
@@ -6761,14 +6761,14 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			allocation_len = DGET32(&cdb[6]);
 			if (allocation_len > (size_t) data_alloc_len) {
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 			data_len = istgt_lu_disk_scsi_report_target_port_groups(spec, conn, cdb, data, data_alloc_len);
@@ -6806,7 +6806,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->W_bit == 0) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			parameter_len = DGET32(&cdb[6]);
 			if (parameter_len == 0) {
@@ -6862,7 +6862,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->R_bit == 0) {
 				ISTGT_ERRLOG("R_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			sa = BGET8W(&cdb[1], 4, 5);
@@ -6871,7 +6871,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 				ISTGT_ERRLOG("data_alloc_len(%d) too small\n",
 				    data_alloc_len);
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 			memset(data, 0, allocation_len);
 
@@ -6895,7 +6895,7 @@ istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd)
 			if (lu_cmd->W_bit == 0) {
 				ISTGT_ERRLOG("W_bit == 0\n");
 				lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-				return -1;
+				break;
 			}
 
 			sa = BGET8W(&cdb[1], 4, 5);
