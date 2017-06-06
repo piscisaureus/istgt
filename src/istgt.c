@@ -2180,7 +2180,7 @@ int main(int argc, char** argv) {
   }
   istgt->config = config;
   istgt->config_old = NULL;
-  // istgt_print_config(config);
+  istgt_print_config(config);
 
 #ifdef ISTGT_USE_KQUEUE
   ISTGT_NOTICELOG("using kqueue\n");
