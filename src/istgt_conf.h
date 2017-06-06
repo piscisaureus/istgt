@@ -29,51 +29,48 @@
 #define ISTGT_CONF_H
 
 typedef struct config_value_t {
-	struct config_value_t *next;
-	char *value;
+  struct config_value_t* next;
+  char* value;
 } CF_VALUE;
 
 typedef struct config_item_t {
-	struct config_item_t *next;
-	char *key;
-	CF_VALUE *val;
+  struct config_item_t* next;
+  char* key;
+  CF_VALUE* val;
 } CF_ITEM;
 
-typedef enum
-{
-	ST_INVALID = -1,
-	ST_NONE = 0,
-	ST_GLOBAL,
-	ST_UNITCONTROL,
-	ST_PORTALGROUP,
-	ST_INITIATORGROUP,
-	ST_LOGICAL_UNIT,
-	ST_AUTHGROUP,
+typedef enum {
+  ST_INVALID = -1,
+  ST_NONE = 0,
+  ST_GLOBAL,
+  ST_UNITCONTROL,
+  ST_PORTALGROUP,
+  ST_INITIATORGROUP,
+  ST_LOGICAL_UNIT,
+  ST_AUTHGROUP,
 } CF_SECTION_TYPE;
 
-typedef struct config_section_t
-{
-	struct config_section_t *next;
-	CF_SECTION_TYPE type;
-	char *name;
-	int num;
-	CF_ITEM *item;
+typedef struct config_section_t {
+  struct config_section_t* next;
+  CF_SECTION_TYPE type;
+  char* name;
+  int num;
+  CF_ITEM* item;
 } CF_SECTION;
 
-typedef struct config_t
-{
-	char *file;
-	CF_SECTION *current_section;
-	CF_SECTION *section;
+typedef struct config_t {
+  char* file;
+  CF_SECTION* current_section;
+  CF_SECTION* section;
 } CONFIG;
 
-CONFIG *istgt_allocate_config(void);
-void istgt_free_config(CONFIG *cp);
-void istgt_copy_cf_item(CF_SECTION *sp_dst, CF_SECTION *sp_src);
-CF_SECTION *istgt_find_cf_section(CONFIG *cp, const char *name);
-CF_ITEM *istgt_find_cf_nitem(CF_SECTION *sp, const char *key, int idx);
-CF_ITEM *istgt_find_cf_item(CF_SECTION *sp, const char *key);
-int istgt_read_config(CONFIG *cp, const char *file);
-int istgt_print_config(CONFIG *cp);
+CONFIG* istgt_allocate_config(void);
+void istgt_free_config(CONFIG* cp);
+void istgt_copy_cf_item(CF_SECTION* sp_dst, CF_SECTION* sp_src);
+CF_SECTION* istgt_find_cf_section(CONFIG* cp, const char* name);
+CF_ITEM* istgt_find_cf_nitem(CF_SECTION* sp, const char* key, int idx);
+CF_ITEM* istgt_find_cf_item(CF_SECTION* sp, const char* key);
+int istgt_read_config(CONFIG* cp, const char* file);
+int istgt_print_config(CONFIG* cp);
 
 #endif /* ISTGT_CONF_H */

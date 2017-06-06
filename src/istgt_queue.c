@@ -38,37 +38,31 @@
 #include "istgt_misc.h"
 #include "istgt_queue.h"
 
-int
-istgt_queue_init(ISTGT_QUEUE_Ptr head)
-{
-	if (head == NULL)
-		return -1;
-	head->prev = NULL;
-	head->next = NULL;
-	head->elem = NULL;
-	head->num = 0;
-	return 0;
+int istgt_queue_init(ISTGT_QUEUE_Ptr head) {
+  if (head == NULL)
+    return -1;
+  head->prev = NULL;
+  head->next = NULL;
+  head->elem = NULL;
+  head->num = 0;
+  return 0;
 }
 
-void
-istgt_queue_destroy(ISTGT_QUEUE_Ptr head)
-{
-	ISTGT_QUEUE_Ptr qp;
-	ISTGT_QUEUE_Ptr next;
+void istgt_queue_destroy(ISTGT_QUEUE_Ptr head) {
+  ISTGT_QUEUE_Ptr qp;
+  ISTGT_QUEUE_Ptr next;
 
-	if (head == NULL)
-		return;
-	for (qp = head->next; qp != NULL && qp != head; qp = next) {
-		next = qp->next;
-		free(qp);
-	}
-	head->next = NULL;
-	head->prev = NULL;
+  if (head == NULL)
+    return;
+  for (qp = head->next; qp != NULL && qp != head; qp = next) {
+    next = qp->next;
+    free(qp);
+  }
+  head->next = NULL;
+  head->prev = NULL;
 }
 
-int
-istgt_queue_count(ISTGT_QUEUE_Ptr head)
-{
+int istgt_queue_count(ISTGT_QUEUE_Ptr head) {
 #if 0
 	ISTGT_QUEUE_Ptr qp;
 	int num;
@@ -81,94 +75,88 @@ istgt_queue_count(ISTGT_QUEUE_Ptr head)
 	}
 	return num;
 #else
-	if (head == NULL)
-		return 0;
-	return head->num;
+  if (head == NULL)
+    return 0;
+  return head->num;
 #endif
 }
 
-int
-istgt_queue_enqueue(ISTGT_QUEUE_Ptr head, void *elem)
-{
-	ISTGT_QUEUE_Ptr qp;
-	ISTGT_QUEUE_Ptr tail;
+int istgt_queue_enqueue(ISTGT_QUEUE_Ptr head, void* elem) {
+  ISTGT_QUEUE_Ptr qp;
+  ISTGT_QUEUE_Ptr tail;
 
-	if (head == NULL)
-		return -1;
-	qp = xmalloc(sizeof *qp);
-	memset(qp, 0, sizeof *qp);
+  if (head == NULL)
+    return -1;
+  qp = xmalloc(sizeof *qp);
+  memset(qp, 0, sizeof *qp);
 
-	qp->elem = elem;
+  qp->elem = elem;
 
-	tail = head->prev;
-	if (tail == NULL) {
-		head->next = qp;
-		head->prev = qp;
-		qp->next = head;
-		qp->prev = head;
-	} else {
-		tail->next = qp;
-		head->prev = qp;
-		qp->next = head;
-		qp->prev = tail;
-	}
-	head->num++;
-	return 0;
+  tail = head->prev;
+  if (tail == NULL) {
+    head->next = qp;
+    head->prev = qp;
+    qp->next = head;
+    qp->prev = head;
+  } else {
+    tail->next = qp;
+    head->prev = qp;
+    qp->next = head;
+    qp->prev = tail;
+  }
+  head->num++;
+  return 0;
 }
 
-void *
-istgt_queue_dequeue(ISTGT_QUEUE_Ptr head)
-{
-	ISTGT_QUEUE_Ptr first;
-	ISTGT_QUEUE_Ptr next;
-	void *elem;
+void* istgt_queue_dequeue(ISTGT_QUEUE_Ptr head) {
+  ISTGT_QUEUE_Ptr first;
+  ISTGT_QUEUE_Ptr next;
+  void* elem;
 
-	if (head == NULL)
-		return NULL;
-	first = head->next;
-	if (first == NULL || first == head) {
-		return NULL;
-	} else {
-		elem = first->elem;
-		next = first->next;
-		xfree(first);
-		if (next == NULL) {
-			head->next = NULL;
-			head->prev = NULL;
-		} else {
-			head->next = next;
-			next->prev = head;
-		}
-	}
-	head->num--;
-	return elem;
+  if (head == NULL)
+    return NULL;
+  first = head->next;
+  if (first == NULL || first == head) {
+    return NULL;
+  } else {
+    elem = first->elem;
+    next = first->next;
+    xfree(first);
+    if (next == NULL) {
+      head->next = NULL;
+      head->prev = NULL;
+    } else {
+      head->next = next;
+      next->prev = head;
+    }
+  }
+  head->num--;
+  return elem;
 }
 
-int
-istgt_queue_enqueue_first(ISTGT_QUEUE_Ptr head, void *elem)
-{
-	ISTGT_QUEUE_Ptr qp;
-	ISTGT_QUEUE_Ptr first;
+int istgt_queue_enqueue_first(ISTGT_QUEUE_Ptr head, void* elem) {
+  ISTGT_QUEUE_Ptr qp;
+  ISTGT_QUEUE_Ptr first;
 
-	if (head == NULL)
-		return -1;
-	qp = xmalloc(sizeof *qp);
-	memset(qp, 0, sizeof *qp);
+  if (head == NULL)
+    return -1;
+  qp = xmalloc(sizeof *qp);
+  memset(qp, 0, sizeof *qp);
 
-	qp->elem = elem;
+  qp->elem = elem;
 
-	first = head->next;
-	if (first == NULL || first == head) {
-		head->next = qp;
-		head->prev = qp;
-		qp->next = head;
-		qp->prev = head;
-	} else {
-		head->next = qp;
-		first->prev = qp;
-		qp->next = first;
-		qp->prev = head;
-	}
-	head->num++;
-	return 0;
+  first = head->next;
+  if (first == NULL || first == head) {
+    head->next = qp;
+    head->prev = qp;
+    qp->next = head;
+    qp->prev = head;
+  } else {
+    head->next = qp;
+    first->prev = qp;
+    qp->next = first;
+    qp->prev = head;
+  }
+  head->num++;
+  return 0;
 }

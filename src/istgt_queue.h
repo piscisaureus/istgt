@@ -31,18 +31,18 @@
 #include <stddef.h>
 
 typedef struct istgt_queue_t {
-	struct istgt_queue_t *prev;
-	struct istgt_queue_t *next;
-	void *elem;
-	int num;
+  struct istgt_queue_t* prev;
+  struct istgt_queue_t* next;
+  void* elem;
+  int num;
 } ISTGT_QUEUE;
-typedef ISTGT_QUEUE *ISTGT_QUEUE_Ptr;
+typedef ISTGT_QUEUE* ISTGT_QUEUE_Ptr;
 
 int istgt_queue_init(ISTGT_QUEUE_Ptr head);
 void istgt_queue_destroy(ISTGT_QUEUE_Ptr head);
 int istgt_queue_count(ISTGT_QUEUE_Ptr head);
-int istgt_queue_enqueue(ISTGT_QUEUE_Ptr head, void *elem);
-void *istgt_queue_dequeue(ISTGT_QUEUE_Ptr head);
-int istgt_queue_enqueue_first(ISTGT_QUEUE_Ptr head, void *elem);
+int istgt_queue_enqueue(ISTGT_QUEUE_Ptr head, void* elem);
+void* istgt_queue_dequeue(ISTGT_QUEUE_Ptr head);
+int istgt_queue_enqueue_first(ISTGT_QUEUE_Ptr head, void* elem);
 
 #endif /* ISTGT_QUEUE_H */

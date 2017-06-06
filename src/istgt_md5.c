@@ -35,34 +35,28 @@
 #include <stddef.h>
 
 #include "istgt.h"
-#include "md5.h"
 #include "istgt_md5.h"
+#include "md5.h"
 
-int
-istgt_md5init(ISTGT_MD5CTX *md5ctx)
-{
-	if (md5ctx == NULL)
-		return -1;
-	MD5_Init(&md5ctx->state);
-	return 0;
+int istgt_md5init(ISTGT_MD5CTX* md5ctx) {
+  if (md5ctx == NULL)
+    return -1;
+  MD5_Init(&md5ctx->state);
+  return 0;
 }
 
-int
-istgt_md5final(void *md5, ISTGT_MD5CTX *md5ctx)
-{
-	if (md5ctx == NULL || md5 == NULL)
-		return -1;
-	MD5_Final(md5, &md5ctx->state);
-	return 0;
+int istgt_md5final(void* md5, ISTGT_MD5CTX* md5ctx) {
+  if (md5ctx == NULL || md5 == NULL)
+    return -1;
+  MD5_Final(md5, &md5ctx->state);
+  return 0;
 }
 
-int
-istgt_md5update(ISTGT_MD5CTX *md5ctx, const void *data, size_t len)
-{
-	if (md5ctx == NULL)
-		return -1;
-	if (data == NULL || len <= 0)
-		return 0;
-	MD5_Update(&md5ctx->state, data, len);
-	return 0;
+int istgt_md5update(ISTGT_MD5CTX* md5ctx, const void* data, size_t len) {
+  if (md5ctx == NULL)
+    return -1;
+  if (data == NULL || len <= 0)
+    return 0;
+  MD5_Update(&md5ctx->state, data, len);
+  return 0;
 }

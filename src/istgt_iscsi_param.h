@@ -31,30 +31,38 @@
 #include <stdint.h>
 
 typedef enum {
-	ISPT_INVALID = -1,
-	ISPT_NOTSPECIFIED = 0,
-	ISPT_LIST,
-	ISPT_NUMERICAL,
-	ISPT_NUMERICAL_MAX,
-	ISPT_DECLARATIVE,
-	ISPT_BOOLEAN_OR,
-	ISPT_BOOLEAN_AND,
+  ISPT_INVALID = -1,
+  ISPT_NOTSPECIFIED = 0,
+  ISPT_LIST,
+  ISPT_NUMERICAL,
+  ISPT_NUMERICAL_MAX,
+  ISPT_DECLARATIVE,
+  ISPT_BOOLEAN_OR,
+  ISPT_BOOLEAN_AND,
 } ISCSI_PARAM_TYPE;
 
 typedef struct iscsi_param_t {
-	struct iscsi_param_t *next;
-	char *key;
-	char *val;
-	char *list;
-	int type;
+  struct iscsi_param_t* next;
+  char* key;
+  char* val;
+  char* list;
+  int type;
 } ISCSI_PARAM;
 
-void istgt_iscsi_param_free(ISCSI_PARAM *params);
-ISCSI_PARAM *istgt_iscsi_param_find(ISCSI_PARAM *params, const char *key);
-int istgt_iscsi_param_del(ISCSI_PARAM **params, const char *key);
-int istgt_iscsi_param_add(ISCSI_PARAM **params, const char *key, const char *val, const char *list, int type);
-int istgt_iscsi_param_set(ISCSI_PARAM *params, const char *key, const char *val);
-int istgt_iscsi_param_set_int(ISCSI_PARAM *params, const char *key, int val);
-int istgt_iscsi_parse_params(ISCSI_PARAM **params, const uint8_t *data, int len);
+void istgt_iscsi_param_free(ISCSI_PARAM* params);
+ISCSI_PARAM* istgt_iscsi_param_find(ISCSI_PARAM* params, const char* key);
+int istgt_iscsi_param_del(ISCSI_PARAM** params, const char* key);
+int istgt_iscsi_param_add(ISCSI_PARAM** params,
+                          const char* key,
+                          const char* val,
+                          const char* list,
+                          int type);
+int istgt_iscsi_param_set(ISCSI_PARAM* params,
+                          const char* key,
+                          const char* val);
+int istgt_iscsi_param_set_int(ISCSI_PARAM* params, const char* key, int val);
+int istgt_iscsi_parse_params(ISCSI_PARAM** params,
+                             const uint8_t* data,
+                             int len);
 
 #endif /* ISTGT_ISCSI_PARAM_H */

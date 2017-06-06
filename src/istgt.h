@@ -48,18 +48,18 @@
 
 #include <pthread.h>
 #include <signal.h>
-#include "istgt_log.h"
 #include "istgt_conf.h"
+#include "istgt_log.h"
 
 #if !defined(__GNUC__)
 #undef __attribute__
 #define __attribute__(x)
 #endif
 #if defined(__GNUC__) && defined(__GNUC_MINOR__)
-#define ISTGT_GNUC_PREREQ(ma,mi) \
-	(__GNUC__ > (ma) || (__GNUC__ == (ma) && __GNUC_MINOR__ >= (mi)))
+#define ISTGT_GNUC_PREREQ(ma, mi) \
+  (__GNUC__ > (ma) || (__GNUC__ == (ma) && __GNUC_MINOR__ >= (mi)))
 #else
-#define ISTGT_GNUC_PREREQ(ma,mi) 0
+#define ISTGT_GNUC_PREREQ(ma, mi) 0
 #endif
 
 #define MAX_TMPBUF 1024
@@ -108,247 +108,244 @@
 
 #define ISTGT_PG_TAG_MAX 0x0000ffff
 #define ISTGT_LU_TAG_MAX 0x0000ffff
-#define ISTGT_UC_TAG     0x00010000
+#define ISTGT_UC_TAG 0x00010000
 #define ISTGT_IOBUFSIZE (2 * 1024 * 1024)
 #define ISTGT_SNSBUFSIZE 4096
 #define ISTGT_SHORTDATASIZE 8192
-#define ISTGT_SHORTPDUSIZE (48+4+ISTGT_SHORTDATASIZE+4)
-#define ISTGT_CONDWAIT (50 * 1000) /* ms */
+#define ISTGT_SHORTPDUSIZE (48 + 4 + ISTGT_SHORTDATASIZE + 4)
+#define ISTGT_CONDWAIT (50 * 1000)    /* ms */
 #define ISTGT_CONDWAIT_MIN (5 * 1000) /* ms */
 #define ISTGT_STACKSIZE (2 * 1024 * 1024)
 
-#if defined (SIGRTMIN)
+#if defined(SIGRTMIN)
 #define ISTGT_SIGWAKEUP (SIGRTMIN + 1)
 #define ISTGT_USE_SIGRT
-#elif defined (SIGIO)
+#elif defined(SIGIO)
 #define ISTGT_SIGWAKEUP (SIGIO)
 #else
 #error "no signal for internal"
 #endif
-#if defined (__FreeBSD__) || defined (__NetBSD__) || defined (__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define ISTGT_USE_KQUEUE
-#if defined (__FreeBSD__)
-#define ISTGT_EV_SET(kevp,a,b,c,d,e,f) EV_SET((kevp),(a),(b),(c),(d),(e),(void *)(f))
-#elif defined (__NetBSD__)
-#define ISTGT_EV_SET(kevp,a,b,c,d,e,f) EV_SET((kevp),(a),(b),(c),(d),(e),(intptr_t)(f))
+#if defined(__FreeBSD__)
+#define ISTGT_EV_SET(kevp, a, b, c, d, e, f) \
+  EV_SET((kevp), (a), (b), (c), (d), (e), (void*) (f))
+#elif defined(__NetBSD__)
+#define ISTGT_EV_SET(kevp, a, b, c, d, e, f) \
+  EV_SET((kevp), (a), (b), (c), (d), (e), (intptr_t)(f))
 #else
-#define ISTGT_EV_SET(kevp,a,b,c,d,e,f) EV_SET((kevp),(a),(b),(c),(d),(e),(f))
+#define ISTGT_EV_SET(kevp, a, b, c, d, e, f) \
+  EV_SET((kevp), (a), (b), (c), (d), (e), (f))
 #endif
 #endif
 
-#define MTX_LOCK(MTX) \
-	do {								\
-		if (pthread_mutex_lock((MTX)) != 0) {			\
-			ISTGT_ERRLOG("lock error\n");			\
-			pthread_exit(NULL);				\
-		}							\
-	} while (0)
-#define MTX_UNLOCK(MTX) \
-	do {								\
-		if (pthread_mutex_unlock((MTX)) != 0) {			\
-			ISTGT_ERRLOG("unlock error\n");			\
-			pthread_exit(NULL);				\
-		}							\
-	} while (0)
-#define SPIN_LOCK(SPIN) \
-	do {								\
-		if (pthread_spin_lock((SPIN)) != 0) {			\
-			ISTGT_ERRLOG("lock error\n");			\
-			pthread_exit(NULL);				\
-		}							\
-	} while (0)
-#define SPIN_UNLOCK(SPIN) \
-	do {								\
-		if (pthread_spin_unlock((SPIN)) != 0) {			\
-			ISTGT_ERRLOG("unlock error\n");			\
-			pthread_exit(NULL);				\
-		}							\
-	} while (0)
+#define MTX_LOCK(MTX)                     \
+  do {                                    \
+    if (pthread_mutex_lock((MTX)) != 0) { \
+      ISTGT_ERRLOG("lock error\n");       \
+      pthread_exit(NULL);                 \
+    }                                     \
+  } while (0)
+#define MTX_UNLOCK(MTX)                     \
+  do {                                      \
+    if (pthread_mutex_unlock((MTX)) != 0) { \
+      ISTGT_ERRLOG("unlock error\n");       \
+      pthread_exit(NULL);                   \
+    }                                       \
+  } while (0)
+#define SPIN_LOCK(SPIN)                   \
+  do {                                    \
+    if (pthread_spin_lock((SPIN)) != 0) { \
+      ISTGT_ERRLOG("lock error\n");       \
+      pthread_exit(NULL);                 \
+    }                                     \
+  } while (0)
+#define SPIN_UNLOCK(SPIN)                   \
+  do {                                      \
+    if (pthread_spin_unlock((SPIN)) != 0) { \
+      ISTGT_ERRLOG("unlock error\n");       \
+      pthread_exit(NULL);                   \
+    }                                       \
+  } while (0)
 
 typedef struct istgt_portal_t {
-	char *label;
-	char *host;
-	char *port;
-	int ref;
-	int idx;
-	int tag;
-	int sock;
+  char* label;
+  char* host;
+  char* port;
+  int ref;
+  int idx;
+  int tag;
+  int sock;
 } PORTAL;
-typedef PORTAL *PORTAL_Ptr;
+typedef PORTAL* PORTAL_Ptr;
 
 typedef struct istgt_portal_group_t {
-	int nportals;
-	PORTAL **portals;
-	int ref;
-	int idx;
-	int tag;
+  int nportals;
+  PORTAL** portals;
+  int ref;
+  int idx;
+  int tag;
 } PORTAL_GROUP;
-typedef PORTAL_GROUP *PORTAL_GROUP_Ptr;
+typedef PORTAL_GROUP* PORTAL_GROUP_Ptr;
 
 typedef struct istgt_initiator_group_t {
-	int ninitiators;
-	char **initiators;
-	int nnetmasks;
-	char **netmasks;
-	int ref;
-	int idx;
-	int tag;
+  int ninitiators;
+  char** initiators;
+  int nnetmasks;
+  char** netmasks;
+  int ref;
+  int idx;
+  int tag;
 } INITIATOR_GROUP;
-typedef INITIATOR_GROUP *INITIATOR_GROUP_Ptr;
+typedef INITIATOR_GROUP* INITIATOR_GROUP_Ptr;
 
 typedef enum {
-	ISTGT_STATE_INVALID = 0,
-	ISTGT_STATE_INITIALIZED = 1,
-	ISTGT_STATE_RUNNING = 2,
-	ISTGT_STATE_EXITING = 3,
-	ISTGT_STATE_SHUTDOWN = 4,
+  ISTGT_STATE_INVALID = 0,
+  ISTGT_STATE_INITIALIZED = 1,
+  ISTGT_STATE_RUNNING = 2,
+  ISTGT_STATE_EXITING = 3,
+  ISTGT_STATE_SHUTDOWN = 4,
 } ISTGT_STATE;
 
 #define DEFAULT_ISTGT_SWMODE ISTGT_SWMODE_NORMAL
 typedef enum {
-	ISTGT_SWMODE_TRADITIONAL = 0,
-	ISTGT_SWMODE_NORMAL = 1,
-	ISTGT_SWMODE_EXPERIMENTAL = 2,
+  ISTGT_SWMODE_TRADITIONAL = 0,
+  ISTGT_SWMODE_NORMAL = 1,
+  ISTGT_SWMODE_EXPERIMENTAL = 2,
 } ISTGT_SWMODE;
 
 typedef struct istgt_t {
-	CONFIG *config;
-	CONFIG *config_old;
-	char *pidfile;
-	char *authfile;
+  CONFIG* config;
+  CONFIG* config_old;
+  char* pidfile;
+  char* authfile;
 #if 0
 	char *mediafile;
 	char *livefile;
 #endif
-	char *mediadirectory;
-	char *nodebase;
+  char* mediadirectory;
+  char* nodebase;
 
-	pthread_attr_t attr;
-	pthread_mutexattr_t mutex_attr;
-	pthread_mutex_t mutex;
-	pthread_mutex_t state_mutex;
-	pthread_mutex_t reload_mutex;
-	pthread_cond_t reload_cond;
+  pthread_attr_t attr;
+  pthread_mutexattr_t mutex_attr;
+  pthread_mutex_t mutex;
+  pthread_mutex_t state_mutex;
+  pthread_mutex_t reload_mutex;
+  pthread_cond_t reload_cond;
 
-	ISTGT_STATE state;
-	ISTGT_SWMODE swmode;
-	uint32_t generation;
-	int sig_pipe[2];
-	int daemon;
-	int pg_reload;
+  ISTGT_STATE state;
+  ISTGT_SWMODE swmode;
+  uint32_t generation;
+  int sig_pipe[2];
+  int daemon;
+  int pg_reload;
 
-	int nuctl_portal;
-	PORTAL uctl_portal[MAX_UCPORTAL];
-	int nuctl_netmasks;
-	char **uctl_netmasks;
+  int nuctl_portal;
+  PORTAL uctl_portal[MAX_UCPORTAL];
+  int nuctl_netmasks;
+  char** uctl_netmasks;
 
-	int nportal_group;
-	PORTAL_GROUP portal_group[MAX_PORTAL_GROUP];
-	int ninitiator_group;
-	INITIATOR_GROUP initiator_group[MAX_INITIATOR_GROUP];
-	int nlogical_unit;
-	struct istgt_lu_t *logical_unit[MAX_LOGICAL_UNIT];
+  int nportal_group;
+  PORTAL_GROUP portal_group[MAX_PORTAL_GROUP];
+  int ninitiator_group;
+  INITIATOR_GROUP initiator_group[MAX_INITIATOR_GROUP];
+  int nlogical_unit;
+  struct istgt_lu_t* logical_unit[MAX_LOGICAL_UNIT];
 
-	int timeout;
-	int nopininterval;
-	int maxr2t;
-	int no_discovery_auth;
-	int req_discovery_auth;
-	int req_discovery_auth_mutual;
-	int discovery_auth_group;
-	int no_uctl_auth;
-	int req_uctl_auth;
-	int req_uctl_auth_mutual;
-	int uctl_auth_group;
+  int timeout;
+  int nopininterval;
+  int maxr2t;
+  int no_discovery_auth;
+  int req_discovery_auth;
+  int req_discovery_auth_mutual;
+  int discovery_auth_group;
+  int no_uctl_auth;
+  int req_uctl_auth;
+  int req_uctl_auth_mutual;
+  int uctl_auth_group;
 
-	int MaxSessions;
-	int MaxConnections;
-	int MaxOutstandingR2T;
-	int DefaultTime2Wait;
-	int DefaultTime2Retain;
-	int FirstBurstLength;
-	int MaxBurstLength;
-	int MaxRecvDataSegmentLength;
-	int InitialR2T;
-	int ImmediateData;
-	int DataPDUInOrder;
-	int DataSequenceInOrder;
-	int ErrorRecoveryLevel;
+  int MaxSessions;
+  int MaxConnections;
+  int MaxOutstandingR2T;
+  int DefaultTime2Wait;
+  int DefaultTime2Retain;
+  int FirstBurstLength;
+  int MaxBurstLength;
+  int MaxRecvDataSegmentLength;
+  int InitialR2T;
+  int ImmediateData;
+  int DataPDUInOrder;
+  int DataSequenceInOrder;
+  int ErrorRecoveryLevel;
 } ISTGT;
-typedef ISTGT *ISTGT_Ptr;
+typedef ISTGT* ISTGT_Ptr;
 
-char *istgt_get_nmval(CF_SECTION *sp, const char *key, int idx1, int idx2);
-char *istgt_get_nval(CF_SECTION *sp, const char *key, int idx);
-char *istgt_get_val(CF_SECTION *sp, const char *key);
-int istgt_get_nintval(CF_SECTION *sp, const char *key, int idx);
-int istgt_get_intval(CF_SECTION *sp, const char *key);
+char* istgt_get_nmval(CF_SECTION* sp, const char* key, int idx1, int idx2);
+char* istgt_get_nval(CF_SECTION* sp, const char* key, int idx);
+char* istgt_get_val(CF_SECTION* sp, const char* key);
+int istgt_get_nintval(CF_SECTION* sp, const char* key, int idx);
+int istgt_get_intval(CF_SECTION* sp, const char* key);
 
 #ifdef USE_ATOMIC
-static inline __attribute__((__always_inline__)) int
-istgt_get_state(ISTGT_Ptr istgt)
-{
-	ISTGT_STATE state;
+static inline __attribute__((__always_inline__)) int istgt_get_state(
+    ISTGT_Ptr istgt) {
+  ISTGT_STATE state;
 #if defined HAVE_ATOMIC_LOAD_ACQ_INT
-	state = atomic_load_acq_int((unsigned int *)&istgt->state);
+  state = atomic_load_acq_int((unsigned int*) &istgt->state);
 #elif defined HAVE_ATOMIC_OR_UINT_NV
-	state = (int)atomic_or_uint_nv((unsigned int *)&istgt->state, 0);
+  state = (int) atomic_or_uint_nv((unsigned int*) &istgt->state, 0);
 #else
 #error "no atomic operation"
 #endif
-	return state;
+  return state;
 }
-static inline __attribute__((__always_inline__)) void
-istgt_set_state(ISTGT_Ptr istgt, ISTGT_STATE state)
-{
+static inline __attribute__((__always_inline__)) void istgt_set_state(
+    ISTGT_Ptr istgt, ISTGT_STATE state) {
 #if defined HAVE_ATOMIC_STORE_REL_INT
-	atomic_store_rel_int((unsigned int *)&istgt->state, state);
+  atomic_store_rel_int((unsigned int*) &istgt->state, state);
 #elif defined HAVE_ATOMIC_SWAP_UINT
-	(void)atomic_swap_uint((unsigned int *)&istgt->state, state);
+  (void) atomic_swap_uint((unsigned int*) &istgt->state, state);
 #if defined HAVE_MEMBAR_PRODUCER
-	membar_producer();
+  membar_producer();
 #endif
 #else
 #error "no atomic operation"
 #endif
 }
-#elif defined (USE_GCC_ATOMIC)
+#elif defined(USE_GCC_ATOMIC)
 /* gcc >= 4.1 builtin functions */
-static inline __attribute__((__always_inline__)) int
-istgt_get_state(ISTGT_Ptr istgt)
-{
-	ISTGT_STATE state;
-	state = __sync_fetch_and_add((unsigned int *)&istgt->state, 0);
-	return state;
+static inline __attribute__((__always_inline__)) int istgt_get_state(
+    ISTGT_Ptr istgt) {
+  ISTGT_STATE state;
+  state = __sync_fetch_and_add((unsigned int*) &istgt->state, 0);
+  return state;
 }
-static inline __attribute__((__always_inline__)) void
-istgt_set_state(ISTGT_Ptr istgt, ISTGT_STATE state)
-{
-	ISTGT_STATE state_old;
-	do {
-		state_old = __sync_fetch_and_add((unsigned int *)&istgt->state, 0);
-	} while (__sync_val_compare_and_swap((unsigned int *)&istgt->state,
-		state_old, state) != state_old);
-#if defined (HAVE_GCC_ATOMIC_SYNCHRONIZE)
-	__sync_synchronize();
+static inline __attribute__((__always_inline__)) void istgt_set_state(
+    ISTGT_Ptr istgt, ISTGT_STATE state) {
+  ISTGT_STATE state_old;
+  do {
+    state_old = __sync_fetch_and_add((unsigned int*) &istgt->state, 0);
+  } while (__sync_val_compare_and_swap(
+               (unsigned int*) &istgt->state, state_old, state) != state_old);
+#if defined(HAVE_GCC_ATOMIC_SYNCHRONIZE)
+  __sync_synchronize();
 #endif
 }
-#else /* !USE_ATOMIC && !USE_GCC_ATOMIC */
-static inline __attribute__((__always_inline__)) int
-istgt_get_state(ISTGT_Ptr istgt)
-{
-	ISTGT_STATE state;
-	MTX_LOCK(&istgt->state_mutex);
-	state = istgt->state;
-	MTX_UNLOCK(&istgt->state_mutex);
-	return state;
+#else  /* !USE_ATOMIC && !USE_GCC_ATOMIC */
+static inline __attribute__((__always_inline__)) int istgt_get_state(
+    ISTGT_Ptr istgt) {
+  ISTGT_STATE state;
+  MTX_LOCK(&istgt->state_mutex);
+  state = istgt->state;
+  MTX_UNLOCK(&istgt->state_mutex);
+  return state;
 }
 
-static inline __attribute__((__always_inline__)) void
-istgt_set_state(ISTGT_Ptr istgt, ISTGT_STATE state)
-{
-	MTX_LOCK(&istgt->state_mutex);
-	istgt->state = state;
-	MTX_UNLOCK(&istgt->state_mutex);
+static inline __attribute__((__always_inline__)) void istgt_set_state(
+    ISTGT_Ptr istgt, ISTGT_STATE state) {
+  MTX_LOCK(&istgt->state_mutex);
+  istgt->state = state;
+  MTX_UNLOCK(&istgt->state_mutex);
 }
 #endif /* USE_ATOMIC */
 
