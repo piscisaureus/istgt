@@ -55,8 +55,8 @@
 #endif
 
 #include <stdint.h>
+#include <string.h>
 
-#include "hash.h"
 #include "md5.h"
 
 #define A m->counter[0]
@@ -74,10 +74,10 @@ void MD5_Init(struct md5* m) {
   A = 0x67452301;
 }
 
-#define F(x, y, z) CRAYFIX((x & y) | (~x & z))
-#define G(x, y, z) CRAYFIX((x & z) | (y & ~z))
+#define F(x, y, z) ((x & y) | (~x & z))
+#define G(x, y, z) ((x & z) | (y & ~z))
 #define H(x, y, z) (x ^ y ^ z)
-#define I(x, y, z) CRAYFIX(y ^ (x | ~z))
+#define I(x, y, z) (y ^ (x | ~z))
 
 #define DOIT(a, b, c, d, k, s, i, OP) \
   a = b + cshift(a + OP(b, c, d) + X[k] + (i), s)
@@ -86,6 +86,10 @@ void MD5_Init(struct md5* m) {
 #define DO2(a, b, c, d, k, s, i) DOIT(a, b, c, d, k, s, i, G)
 #define DO3(a, b, c, d, k, s, i) DOIT(a, b, c, d, k, s, i, H)
 #define DO4(a, b, c, d, k, s, i) DOIT(a, b, c, d, k, s, i, I)
+
+static inline uint32_t cshift(uint32_t x, uint32_t n) {
+  return (x << n) | (x >> (32 - n));
+}
 
 static inline void calc(struct md5* m, uint32_t* data) {
   uint32_t AA, BB, CC, DD;
