@@ -7,6 +7,8 @@ void istgt_platform_init(void);
 #ifndef _WIN32
 /* == POSIX =============================================================== */
 
+#define _FILE_OFFSET_BITS 64
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
