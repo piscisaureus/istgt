@@ -333,7 +333,6 @@ typedef struct istgt_lu_disk_t {
   const char* disktype;
   void* exspec;
   uint64_t fsize;
-  uint64_t foffset;
   uint64_t size;
   uint64_t blocklen;
   uint64_t blockcnt;
@@ -379,11 +378,14 @@ typedef struct istgt_lu_disk_t {
   /* entry */
   int (*open)(struct istgt_lu_disk_t* spec, int flags, int mode);
   int (*close)(struct istgt_lu_disk_t* spec);
-  int64_t (*seek)(struct istgt_lu_disk_t* spec, uint64_t offset);
-  int64_t (*read)(struct istgt_lu_disk_t* spec, void* buf, uint64_t nbytes);
-  int64_t (*write)(struct istgt_lu_disk_t* spec,
-                   const void* buf,
-                   uint64_t nbytes);
+  int64_t (*pread)(struct istgt_lu_disk_t* spec,
+                   void* buf,
+                   uint64_t nbytes,
+                   uint64_t offset);
+  int64_t (*pwrite)(struct istgt_lu_disk_t* spec,
+                    const void* buf,
+                    uint64_t nbytes,
+                    uint64_t offset);
   int64_t (*sync)(struct istgt_lu_disk_t* spec,
                   uint64_t offset,
                   uint64_t nbytes);

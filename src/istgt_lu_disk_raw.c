@@ -18,7 +18,6 @@ static int istgt_lu_disk_open_raw(ISTGT_LU_DISK* spec, int flags, int mode) {
     return -1;
   }
   spec->fd = rc;
-  spec->foffset = 0;
   return 0;
 }
 
@@ -32,7 +31,6 @@ static int istgt_lu_disk_close_raw(ISTGT_LU_DISK* spec) {
     return -1;
   }
   spec->fd = -1;
-  spec->foffset = 0;
   return 0;
 }
 
@@ -51,34 +49,20 @@ istgt_lu_disk_lseek_raw(ISTGT_LU_DISK *spec, off_t offset, int whence)
 }
 #endif
 
-static int64_t istgt_lu_disk_seek_raw(ISTGT_LU_DISK* spec, uint64_t offset) {
-  printf("Seek: %lld\n", (unsigned long long) offset);
-
-#ifndef _WIN32
-  // On windows we use the moral equivalent of pread/pwrite, so no need
-  // actually seek before read/write.
-  off_t rc = lseek(spec->fd, (off_t) offset, SEEK_SET);
-  if (rc < 0) {
-    return -1;
-  }
-  if (rc != offset)
-    abort();
-#endif  // !_WIN32
-  spec->foffset = offset;
-  return 0;
-}
-
-static int64_t istgt_lu_disk_read_raw(ISTGT_LU_DISK* spec,
-                                      void* buf,
-                                      uint64_t nbytes) {
+static int64_t istgt_lu_disk_pread_raw(ISTGT_LU_DISK* spec,
+                                       void* buf,
+                                       uint64_t nbytes,
+                                       uint64_t offset) {
+  printf("pread: %llu at %llu\n",
+         (unsigned long long) nbytes,
+         (unsigned long long) offset);
   int64_t rc;
-  printf("Read: %d\n", (int) nbytes);
 
 #ifdef _WIN32
   OVERLAPPED o = {0};
-  LARGE_INTEGER offset = {.QuadPart = spec->foffset};
-  o.Offset = offset.LowPart;
-  o.OffsetHigh = offset.HighPart;
+  LARGE_INTEGER offset_li = {.QuadPart = offset};
+  o.Offset = offset_li.LowPart;
+  o.OffsetHigh = offset_li.HighPart;
   HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
   DWORD bytes_read;
   if (!ReadFile(handle, buf, nbytes, &bytes_read, &o)) {
@@ -93,27 +77,29 @@ static int64_t istgt_lu_disk_read_raw(ISTGT_LU_DISK* spec,
   }
 
 #else   // _WIN32
-  rc = (int64_t) read(spec->fd, buf, (size_t) nbytes);
+  rc = (int64_t) pread(spec->fd, buf, nbytes, offset);
   if (rc < 0) {
     return -1;
   }
 #endif  // _WIN32
 
-  spec->foffset += rc;
   return rc;
 }
 
-static int64_t istgt_lu_disk_write_raw(ISTGT_LU_DISK* spec,
-                                       const void* buf,
-                                       uint64_t nbytes) {
+static int64_t istgt_lu_disk_pwrite_raw(ISTGT_LU_DISK* spec,
+                                        const void* buf,
+                                        uint64_t nbytes,
+                                        uint64_t offset) {
   int64_t rc;
-  printf("Write: %d\n", (int) nbytes);
+  printf("pwrite: %llu at %llu\n",
+         (unsigned long long) nbytes,
+         (unsigned long long) offset);
 
 #ifdef _WIN32
   OVERLAPPED o = {0};
-  LARGE_INTEGER offset = {.QuadPart = spec->foffset};
-  o.Offset = offset.LowPart;
-  o.OffsetHigh = offset.HighPart;
+  LARGE_INTEGER offset_li = {.QuadPart = offset};
+  o.Offset = offset_li.LowPart;
+  o.OffsetHigh = offset_li.HighPart;
   HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
   DWORD bytes_written;
   if (!WriteFile(handle, buf, nbytes, &bytes_written, &o))
@@ -122,15 +108,13 @@ static int64_t istgt_lu_disk_write_raw(ISTGT_LU_DISK* spec,
   rc = bytes_written;
 
 #else   // _WIN32
-  rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
+  rc = pwrite(spec->fd, buf, nbytes, offset);
   if (rc < 0)
     return -1;
 #endif  // _WIN32
 
-
-  spec->foffset += rc;
-  if (spec->foffset > spec->fsize) {
-    spec->fsize = spec->foffset;
+  if (offset > spec->fsize) {
+    spec->fsize = offset;
   }
   return rc;
 }
@@ -141,7 +125,6 @@ static int64_t istgt_lu_disk_sync_raw(ISTGT_LU_DISK* spec,
   printf("sync: %llu at %llu\n",
          (unsigned long long) nbytes,
          (unsigned long long) offset);
-  spec->foffset = offset + nbytes;
   return fsync(spec->fd);
 }
 
@@ -168,13 +151,7 @@ static int istgt_lu_disk_allocate_raw(ISTGT_LU_DISK* spec) {
   spec->fsize = fsize;
 
   offset = size - nbytes;
-  rc = istgt_lu_disk_seek_raw(spec, offset);
-  if (rc == -1) {
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    xfree(data);
-    return -1;
-  }
-  rc = istgt_lu_disk_read_raw(spec, data, nbytes);
+  rc = istgt_lu_disk_pread_raw(spec, data, nbytes, offset);
   /* EOF is OK */
   if (rc == -1) {
     ISTGT_ERRLOG("lu_disk_read() failed\n");
@@ -183,19 +160,12 @@ static int istgt_lu_disk_allocate_raw(ISTGT_LU_DISK* spec) {
   }
 
   /* allocate complete size */
-  rc = istgt_lu_disk_seek_raw(spec, offset);
-  if (rc == -1) {
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    xfree(data);
-    return -1;
-  }
-  rc = istgt_lu_disk_write_raw(spec, data, nbytes);
+  rc = istgt_lu_disk_pwrite_raw(spec, data, nbytes, offset);
   if (rc == -1 || (uint64_t) rc != nbytes) {
     ISTGT_ERRLOG("lu_disk_write() failed\n");
     xfree(data);
     return -1;
   }
-  spec->foffset = size;
 
   xfree(data);
   return 0;
@@ -253,9 +223,8 @@ int istgt_lu_disk_raw_lun_init(ISTGT_LU_DISK* spec,
                  spec->lun);
   spec->open = istgt_lu_disk_open_raw;
   spec->close = istgt_lu_disk_close_raw;
-  spec->seek = istgt_lu_disk_seek_raw;
-  spec->read = istgt_lu_disk_read_raw;
-  spec->write = istgt_lu_disk_write_raw;
+  spec->pread = istgt_lu_disk_pread_raw;
+  spec->pwrite = istgt_lu_disk_pwrite_raw;
   spec->sync = istgt_lu_disk_sync_raw;
   spec->allocate = istgt_lu_disk_allocate_raw;
   spec->setcache = istgt_lu_disk_setcache_raw;

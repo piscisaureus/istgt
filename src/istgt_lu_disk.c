@@ -3777,13 +3777,7 @@ static int istgt_lu_disk_lbread(ISTGT_LU_DISK* spec,
   }
   data = lu_cmd->iobuf;
 
-  rc = spec->seek(spec, offset);
-  if (rc < 0) {
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    return -1;
-  }
-
-  rc = spec->read(spec, data, nbytes);
+  rc = spec->pread(spec, data, nbytes, offset);
   if (rc < 0) {
     ISTGT_ERRLOG("lu_disk_read() failed\n");
     return -1;
@@ -3857,14 +3851,7 @@ static int istgt_lu_disk_lbwrite(ISTGT_LU_DISK* spec,
     return -1;
   }
 
-  spec->req_write_cache = 0;
-  rc = spec->seek(spec, offset);
-  if (rc < 0) {
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    return -1;
-  }
-
-  rc = spec->write(spec, data, nbytes);
+  rc = spec->pwrite(spec, data, nbytes, offset);
   if (rc < 0 || (uint64_t) rc != nbytes) {
     ISTGT_ERRLOG("lu_disk_write() failed\n");
     return -1;
@@ -3953,21 +3940,17 @@ static int istgt_lu_disk_lbwrite_same(ISTGT_LU_DISK* spec,
   }
 
   spec->req_write_cache = 0;
-  rc = spec->seek(spec, offset);
-  if (rc < 0) {
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    return -1;
-  }
 
 #if 0
 	nblocks = 0;
 	while (nblocks < llen) {
-		rc = spec->write(spec, data, nbytes);
+		rc = spec->pwrite(spec, data, nbytes, offset);
 		if (rc < 0 || rc != nbytes) {
-			ISTGT_ERRLOG("lu_disk_write() failed\n");
+			ISTGT_ERRLOG("lu_disk_pwrite() failed\n");
 			return -1;
 		}
-		nblocks++;
+    offset += nbytes;
+    nblocks++;
 	}
 #else
   nblocks = 0;
@@ -3979,11 +3962,13 @@ static int istgt_lu_disk_lbwrite_same(ISTGT_LU_DISK* spec,
   nblocks = 0;
   while (nblocks < llen) {
     uint64_t reqblocks = DMIN64(wblocks, (llen - nblocks));
-    rc = spec->write(spec, conn->workbuf, (reqblocks * nbytes));
-    if (rc < 0 || (uint64_t) rc != (reqblocks * nbytes)) {
-      ISTGT_ERRLOG("lu_disk_write() failed\n");
+    uint64_t reqbytes = reqblocks * nbytes;
+    rc = spec->pwrite(spec, conn->workbuf, reqbytes, offset);
+    if (rc < 0 || (uint64_t) rc != reqbytes) {
+      ISTGT_ERRLOG("lu_disk_pwrite() failed\n");
       return -1;
     }
+    offset += reqbytes;
     nblocks += reqblocks;
   }
 #endif
@@ -4072,14 +4057,7 @@ static int istgt_lu_disk_lbwrite_ats(ISTGT_LU_DISK* spec,
   /* start atomic test and set */
   MTX_LOCK(&spec->ats_mutex);
 
-  rc = spec->seek(spec, offset);
-  if (rc < 0) {
-    MTX_UNLOCK(&spec->ats_mutex);
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    return -1;
-  }
-
-  rc = spec->read(spec, spec->watsbuf, nbytes);
+  rc = spec->pread(spec, spec->watsbuf, nbytes, offset);
   if (rc < 0 || (uint64_t) rc != nbytes) {
     MTX_UNLOCK(&spec->ats_mutex);
     ISTGT_ERRLOG("lu_disk_read() failed\n");
@@ -4099,16 +4077,10 @@ static int istgt_lu_disk_lbwrite_ats(ISTGT_LU_DISK* spec,
     return -1;
   }
 
-  rc = spec->seek(spec, offset);
-  if (rc < 0) {
-    MTX_UNLOCK(&spec->ats_mutex);
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    return -1;
-  }
-  rc = spec->write(spec, data + nbytes, nbytes);
+  rc = spec->pwrite(spec, data + nbytes, nbytes, offset);
   if (rc < 0 || (uint64_t) rc != nbytes) {
     MTX_UNLOCK(&spec->ats_mutex);
-    ISTGT_ERRLOG("lu_disk_write() failed\n");
+    ISTGT_ERRLOG("lu_disk_pwrite() failed\n");
     return -1;
   }
   ISTGT_TRACELOG(
