@@ -44,12 +44,10 @@
 #endif
 #endif /* USE_ATOMIC */
 
-#include "build.h"
-
-#include <pthread.h>
-#include <signal.h>
 #include "istgt_conf.h"
+#include "istgt_control_pipe.h"
 #include "istgt_log.h"
+#include "istgt_platform.h"
 
 #if !defined(__GNUC__)
 #undef __attribute__
@@ -70,7 +68,6 @@
 #define MAX_TARGET_NAME 256
 #define MAX_ISCSI_NAME 256
 
-#define MAX_UCPORTAL 16
 #define MAX_PORTAL 1024
 #define MAX_INITIATOR 256
 #define MAX_NETMASK 256
@@ -79,14 +76,6 @@
 #define MAX_LOGICAL_UNIT 4096
 #define MAX_R2T 256
 
-#define DEFAULT_CONFIG BUILD_ETC_ISTGT "/istgt.conf"
-#define DEFAULT_PIDFILE "/var/run/istgt.pid"
-#define DEFAULT_AUTHFILE BUILD_ETC_ISTGT "/auth.conf"
-#if 0
-#define DEFAULT_MEDIAFILE BUILD_ETC_ISTGT "/media.conf"
-#define DEFAULT_LIVEFILE BUILD_ETC_ISTGT "/istgt.live"
-#endif
-#define DEFAULT_MEDIADIRECTORY BUILD_VAR_ISTGT
 #define DEFAULT_NODEBASE "iqn.2007-09.jp.ne.peach.istgt"
 #define DEFAULT_PORT 3260
 #define DEFAULT_MAX_SESSIONS 32
@@ -115,29 +104,6 @@
 #define ISTGT_SHORTPDUSIZE (48 + 4 + ISTGT_SHORTDATASIZE + 4)
 #define ISTGT_CONDWAIT (50 * 1000)    /* ms */
 #define ISTGT_CONDWAIT_MIN (5 * 1000) /* ms */
-#define ISTGT_STACKSIZE (2 * 1024 * 1024)
-
-#if defined(SIGRTMIN)
-#define ISTGT_SIGWAKEUP (SIGRTMIN + 1)
-#define ISTGT_USE_SIGRT
-#elif defined(SIGIO)
-#define ISTGT_SIGWAKEUP (SIGIO)
-#else
-#error "no signal for internal"
-#endif
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-#define ISTGT_USE_KQUEUE
-#if defined(__FreeBSD__)
-#define ISTGT_EV_SET(kevp, a, b, c, d, e, f) \
-  EV_SET((kevp), (a), (b), (c), (d), (e), (void*) (f))
-#elif defined(__NetBSD__)
-#define ISTGT_EV_SET(kevp, a, b, c, d, e, f) \
-  EV_SET((kevp), (a), (b), (c), (d), (e), (intptr_t)(f))
-#else
-#define ISTGT_EV_SET(kevp, a, b, c, d, e, f) \
-  EV_SET((kevp), (a), (b), (c), (d), (e), (f))
-#endif
-#endif
 
 #define MTX_LOCK(MTX)                     \
   do {                                    \
@@ -207,43 +173,22 @@ typedef enum {
   ISTGT_STATE_SHUTDOWN = 4,
 } ISTGT_STATE;
 
-#define DEFAULT_ISTGT_SWMODE ISTGT_SWMODE_NORMAL
-typedef enum {
-  ISTGT_SWMODE_TRADITIONAL = 0,
-  ISTGT_SWMODE_NORMAL = 1,
-  ISTGT_SWMODE_EXPERIMENTAL = 2,
-} ISTGT_SWMODE;
 
 typedef struct istgt_t {
   CONFIG* config;
   CONFIG* config_old;
-  char* pidfile;
-  char* authfile;
-#if 0
-	char *mediafile;
-	char *livefile;
-#endif
-  char* mediadirectory;
   char* nodebase;
 
-  pthread_attr_t attr;
-  pthread_mutexattr_t mutex_attr;
   pthread_mutex_t mutex;
   pthread_mutex_t state_mutex;
   pthread_mutex_t reload_mutex;
   pthread_cond_t reload_cond;
 
   ISTGT_STATE state;
-  ISTGT_SWMODE swmode;
   uint32_t generation;
-  int sig_pipe[2];
+  istgt_control_pipe_t sig_pipe;
   int daemon;
   int pg_reload;
-
-  int nuctl_portal;
-  PORTAL uctl_portal[MAX_UCPORTAL];
-  int nuctl_netmasks;
-  char** uctl_netmasks;
 
   int nportal_group;
   PORTAL_GROUP portal_group[MAX_PORTAL_GROUP];

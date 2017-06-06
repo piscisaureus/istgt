@@ -154,8 +154,10 @@ void xfree(void* p);
 char* xstrdup(const char* s);
 
 /* string functions */
+#ifndef _WIN32
 char* strlwr(char* s);
 char* strupr(char* s);
+#endif /* _WIN32 */
 char* strsepq(char** stringp, const char* delim);
 char* trim_string(char* s);
 char* escape_string(const char* s);

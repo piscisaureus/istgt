@@ -59,7 +59,6 @@ typedef struct config_section_t {
 } CF_SECTION;
 
 typedef struct config_t {
-  char* file;
   CF_SECTION* current_section;
   CF_SECTION* section;
 } CONFIG;
@@ -70,7 +69,7 @@ void istgt_copy_cf_item(CF_SECTION* sp_dst, CF_SECTION* sp_src);
 CF_SECTION* istgt_find_cf_section(CONFIG* cp, const char* name);
 CF_ITEM* istgt_find_cf_nitem(CF_SECTION* sp, const char* key, int idx);
 CF_ITEM* istgt_find_cf_item(CF_SECTION* sp, const char* key);
-int istgt_read_config(CONFIG* cp, const char* file);
+int istgt_read_config(CONFIG* cp, size_t cfgc, const char* cfgv[]);
 int istgt_print_config(CONFIG* cp);
 
 #endif /* ISTGT_CONF_H */

@@ -28,12 +28,10 @@
 #ifndef ISTGT_LU_H
 #define ISTGT_LU_H
 
-#include <pthread.h>
 #include <time.h>
-#ifdef HAVE_UUID_H
-#include <uuid.h>
-#endif
+
 #include "istgt.h"
+#include "istgt_platform.h"
 #include "istgt_queue.h"
 
 #define MAX_LU_LUN 64
@@ -49,8 +47,6 @@
 
 #define DEFAULT_LU_BLOCKLEN 512
 #define DEFAULT_LU_BLOCKLEN_DISK DEFAULT_LU_BLOCKLEN
-#define DEFAULT_LU_BLOCKLEN_DVD 2048
-#define DEFAULT_LU_BLOCKLEN_TAPE DEFAULT_LU_BLOCKLEN
 #define DEFAULT_LU_QUEUE_DEPTH 32
 #define DEFAULT_LU_ROTATIONRATE 7200 /* 7200 rpm */
 #define DEFAULT_LU_FORMFACTOR 0x02   /* 3.5 inch */
@@ -106,13 +102,7 @@ typedef enum {
   ISTGT_LU_FLAG_MEDIA_DYNAMIC = 0x00000020,
 } ISTGT_LU_FLAG;
 
-typedef enum {
-  ISTGT_LU_TYPE_NONE = 0,
-  ISTGT_LU_TYPE_PASS = 1,
-  ISTGT_LU_TYPE_DISK = 2,
-  ISTGT_LU_TYPE_DVD = 3,
-  ISTGT_LU_TYPE_TAPE = 4,
-} ISTGT_LU_TYPE;
+typedef enum { ISTGT_LU_TYPE_NONE = 0, ISTGT_LU_TYPE_DISK = 2 } ISTGT_LU_TYPE;
 
 typedef enum {
   ISTGT_LU_LUN_TYPE_NONE = 0,
@@ -347,10 +337,6 @@ typedef struct istgt_lu_disk_t {
   uint64_t size;
   uint64_t blocklen;
   uint64_t blockcnt;
-
-#ifdef HAVE_UUID_H
-  uuid_t uuid;
-#endif /* HAVE_UUID_H */
 
   /* cache flags */
   int read_cache;

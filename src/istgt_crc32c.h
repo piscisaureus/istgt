@@ -30,7 +30,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/uio.h>
+#include "istgt_platform.h"
 
 #define ISTGT_USE_CRC32C_TABLE
 #define ISTGT_CRC32C_INITIAL 0xffffffffUL

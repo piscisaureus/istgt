@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995 - 2001 Kungliga Tekniska H�gskolan
+ * Copyright (c) 1995 - 2001 Kungliga Tekniska Högskolan
  * (Royal Institute of Technology, Stockholm, Sweden).
  * All rights reserved.
  *
@@ -35,7 +35,7 @@
 #include "config.h"
 #endif
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
 #include <machine/endian.h>
 #if !defined(BYTE_ORDER) || !defined(BIG_ENDIAN)
 #error BYTE_ORDER (OS X) macros not defined
@@ -46,9 +46,15 @@
 #ifndef __BIG_ENDIAN
 #define __BIG_ENDIAN BIG_ENDIAN
 #endif
+#elif defined(_WIN32)
+#define __BIG_ENDIAN 4321
+#define __LITTLE_ENDIAN 1234
+#define __BYTE_ORDER __LITTLE_ENDIAN
 #else
 #include <endian.h>
 #endif
+
+#include <stdint.h>
 
 #include "hash.h"
 #include "md5.h"
@@ -81,8 +87,8 @@ void MD5_Init(struct md5* m) {
 #define DO3(a, b, c, d, k, s, i) DOIT(a, b, c, d, k, s, i, H)
 #define DO4(a, b, c, d, k, s, i) DOIT(a, b, c, d, k, s, i, I)
 
-static inline void calc(struct md5* m, u_int32_t* data) {
-  u_int32_t AA, BB, CC, DD;
+static inline void calc(struct md5* m, uint32_t* data) {
+  uint32_t AA, BB, CC, DD;
 
   AA = A;
   BB = B;
@@ -191,8 +197,8 @@ static inline void calc(struct md5* m, u_int32_t* data) {
 #endif
 
 #if __BYTE_ORDER == __BIG_ENDIAN
-static inline u_int32_t swap_u_int32_t(u_int32_t t) {
-  u_int32_t temp1, temp2;
+static inline uint32_t swap_uint32_t(uint32_t t) {
+  uint32_t temp1, temp2;
 
   temp1 = cshift(t, 16);
   temp2 = temp1 >> 8;
@@ -226,15 +232,15 @@ void MD5_Update(struct md5* m, const void* v, size_t len) {
     if (offset == 64) {
 #if __BYTE_ORDER == __BIG_ENDIAN
       int i;
-      u_int32_t current[16];
+      uint32_t current[16];
       struct x32* u = (struct x32*) m->save;
       for (i = 0; i < 8; i++) {
-        current[2 * i + 0] = swap_u_int32_t(u[i].a);
-        current[2 * i + 1] = swap_u_int32_t(u[i].b);
+        current[2 * i + 0] = swap_uint32_t(u[i].a);
+        current[2 * i + 1] = swap_uint32_t(u[i].b);
       }
       calc(m, current);
 #else
-      calc(m, (u_int32_t*) m->save);
+      calc(m, (uint32_t*) m->save);
 #endif
       offset = 0;
     }
@@ -271,10 +277,10 @@ void MD5_Final(void* res, struct md5* m) {
 #if 0
   {
     int i;
-    u_int32_t *r = (u_int32_t *)res;
+    uint32_t *r = (uint32_t *)res;
 
     for (i = 0; i < 4; ++i)
-      r[i] = swap_u_int32_t (m->counter[i]);
+      r[i] = swap_uint32_t (m->counter[i]);
   }
 #endif
 }

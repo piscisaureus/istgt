@@ -37,20 +37,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
 #include <time.h>
 
-#include <unistd.h>
-
-#ifdef HAVE_LIBPTHREAD
-#include <pthread.h>
-#endif
-#ifdef HAVE_SCHED
-#include <sched.h>
-#endif
 
 #include "istgt.h"
 #include "istgt_misc.h"
+#include "istgt_platform.h"
 
 #if !defined(__GNUC__)
 #undef __attribute__
@@ -67,7 +59,6 @@ static void fatal(const char* format, ...) {
   va_start(ap, format);
   vsnprintf(buf, sizeof buf, format, ap);
   fprintf(stderr, "%s", buf);
-  syslog(LOG_ERR, "%s", buf);
   va_end(ap);
   exit(EXIT_FAILURE);
 }
@@ -115,6 +106,7 @@ char* xstrdup(const char* s) {
   return p;
 }
 
+#ifndef _WIN32
 char* strlwr(char* s) {
   char* p;
 
@@ -142,6 +134,8 @@ char* strupr(char* s) {
   }
   return s;
 }
+#endif
+
 
 char* strsepq(char** stringp, const char* delim) {
   char *p, *q, *r;

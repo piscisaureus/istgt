@@ -46,13 +46,11 @@
 
 #include <signal.h>
 #include <stdint.h>
-#include <sys/socket.h>
-#ifdef HAVE_UUID_H
-#include <uuid.h>
-#endif
+
 #include "istgt.h"
 #include "istgt_iscsi.h"
 #include "istgt_lu.h"
+#include "istgt_platform.h"
 
 #if !defined(__GNUC__)
 #undef __attribute__
@@ -67,7 +65,6 @@
 
 /* istgt_iscsi.c */
 int istgt_chap_get_authinfo(ISTGT_CHAP_AUTH* auth,
-                            const char* authfile,
                             const char* authuser,
                             int ag_tag);
 int istgt_iscsi_transfer_out(CONN_Ptr conn,
@@ -162,9 +159,6 @@ int istgt_uctl_shutdown(ISTGT_Ptr istgt);
 struct istgt_lu_disk_t;
 void istgt_scsi_dump_cdb(uint8_t* cdb);
 void istgt_strcpy_pad(uint8_t* dst, size_t size, const char* src, int pad);
-#ifdef HAVE_UUID_H
-uint64_t istgt_uuid2uint64(uuid_t* uuid);
-#endif /* HAVE_UUID_H */
 uint64_t istgt_get_lui(const char* name, int lun);
 uint64_t istgt_get_rkey(const char* initiator_name, uint64_t lui);
 int istgt_lu_set_lid(uint8_t* buf, uint64_t vid);
@@ -186,7 +180,6 @@ int istgt_lu_disk_queue_clear_all(ISTGT_LU_Ptr lu, int lun);
 int istgt_lu_disk_queue(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd);
 int istgt_lu_disk_queue_count(ISTGT_LU_Ptr lu, int* lun);
 int istgt_lu_disk_queue_start(ISTGT_LU_Ptr lu, int lun);
-void istgt_lu_disk_aio_done(siginfo_t* info);
 
 /* istgt_lu_disk_vbox.c */
 int istgt_lu_disk_vbox_lun_init(ISTGT_LU_DISK* spec,
@@ -196,43 +189,6 @@ int istgt_lu_disk_vbox_lun_shutdown(ISTGT_LU_DISK* spec,
                                     ISTGT_Ptr istgt,
                                     ISTGT_LU_Ptr lu);
 
-/* istgt_lu_dvd.c */
-struct istgt_lu_dvd_t;
-int istgt_lu_dvd_media_present(struct istgt_lu_dvd_t* spec);
-int istgt_lu_dvd_media_lock(struct istgt_lu_dvd_t* spec);
-int istgt_lu_dvd_load_media(struct istgt_lu_dvd_t* spec);
-int istgt_lu_dvd_unload_media(struct istgt_lu_dvd_t* spec);
-int istgt_lu_dvd_change_media(struct istgt_lu_dvd_t* spec,
-                              char* type,
-                              char* flags,
-                              char* file,
-                              char* size);
-int istgt_lu_dvd_init(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu);
-int istgt_lu_dvd_shutdown(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu);
-int istgt_lu_dvd_reset(ISTGT_LU_Ptr lu, int lun);
-int istgt_lu_dvd_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd);
-
-/* istgt_lu_tape.c */
-struct istgt_lu_tape_t;
-int istgt_lu_tape_media_present(struct istgt_lu_tape_t* spec);
-int istgt_lu_tape_media_lock(struct istgt_lu_tape_t* spec);
-int istgt_lu_tape_load_media(struct istgt_lu_tape_t* spec);
-int istgt_lu_tape_unload_media(struct istgt_lu_tape_t* spec);
-int istgt_lu_tape_change_media(struct istgt_lu_tape_t* spec,
-                               char* type,
-                               char* flags,
-                               char* file,
-                               char* size);
-int istgt_lu_tape_init(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu);
-int istgt_lu_tape_shutdown(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu);
-int istgt_lu_tape_reset(ISTGT_LU_Ptr lu, int lun);
-int istgt_lu_tape_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd);
-
-/* istgt_lu_pass.c */
-int istgt_lu_pass_init(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu);
-int istgt_lu_pass_shutdown(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu);
-int istgt_lu_pass_reset(ISTGT_LU_Ptr lu, int lun);
-int istgt_lu_pass_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd);
 
 #ifdef USE_ATOMIC
 static inline __attribute__((__always_inline__)) int istgt_lu_get_state(

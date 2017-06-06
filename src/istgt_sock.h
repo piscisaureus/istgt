@@ -29,7 +29,7 @@
 #define ISTGT_SOCK_H
 
 #include <stddef.h>
-#include <unistd.h>
+#include "istgt_platform.h"
 
 int istgt_getaddr(int sock, char* saddr, int slen, char* caddr, int clen);
 int istgt_listen(const char* ip, int port);
@@ -48,5 +48,8 @@ ssize_t istgt_readline_socket(int sock,
                               int* tmpcnt,
                               int timeout);
 ssize_t istgt_writeline_socket(int sock, const char* buf, int timeout);
+ssize_t istgt_readv_socket(int fd, const struct iovec* iov, int iovcnt);
+ssize_t istgt_writev_socket(int fildes, const struct iovec* iov, int iovcnt);
+void istgt_close_socket(int fd);
 
 #endif /* ISTGT_SOCK_H */

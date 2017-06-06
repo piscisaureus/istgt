@@ -33,19 +33,12 @@
 #include <stdint.h>
 
 #include <errno.h>
-#include <poll.h>
-#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef HAVE_PTHREAD_NP_H
-#include <pthread_np.h>
-#endif
-#include <sys/socket.h>
-#include <sys/types.h>
+
 #include <time.h>
-#include <unistd.h>
 
 #include "istgt.h"
 #include "istgt_conf.h"
@@ -56,11 +49,14 @@
 #include "istgt_lu.h"
 #include "istgt_md5.h"
 #include "istgt_misc.h"
+#include "istgt_platform.h"
 #include "istgt_proto.h"
 #include "istgt_queue.h"
 #include "istgt_scsi.h"
 #include "istgt_sock.h"
 #include "istgt_ver.h"
+
+#include "auth_file.h"
 
 #ifdef ISTGT_USE_KQUEUE
 #include <sys/event.h>
@@ -125,10 +121,6 @@ static int istgt_iscsi_drop_old_conns(CONN_Ptr conn);
 
 /* Switch to use readv/writev (assume blocking) */
 #define ISTGT_USE_IOVEC
-
-#if defined(ISTGT_USE_IOVEC)
-#include <sys/uio.h>
-#endif
 
 #if !defined(ISTGT_USE_IOVEC)
 #if 0
@@ -638,7 +630,7 @@ static int istgt_iscsi_read_pdu(CONN_Ptr conn, ISCSI_PDU_Ptr pdu) {
   ISTGT_TRACELOG(ISTGT_TRACE_NET, "BHS read %d\n", ISCSI_BHS_LEN);
   errno = 0;
   start = time(NULL);
-  rc = recv(conn->sock, &pdu->bhs, ISCSI_BHS_LEN, MSG_WAITALL);
+  rc = recv(conn->sock, (void*) &pdu->bhs, ISCSI_BHS_LEN, MSG_WAITALL);
   if (rc < 0) {
     now = time(NULL);
     if (errno == ECONNRESET) {
@@ -733,7 +725,7 @@ static int istgt_iscsi_read_pdu(CONN_Ptr conn, ISCSI_PDU_Ptr pdu) {
   errno = 0;
   start = time(NULL);
   while (nbytes > 0) {
-    rc = readv(conn->sock, &iovec[0], 4);
+    rc = istgt_readv_socket(conn->sock, &iovec[0], 4);
     if (rc < 0) {
       now = time(NULL);
       ISTGT_ERRLOG("readv() failed (%d,errno=%d,%s,time=%d)\n",
@@ -1212,7 +1204,7 @@ static int istgt_iscsi_write_pdu_internal(CONN_Ptr conn, ISCSI_PDU_Ptr pdu) {
   errno = 0;
   start = time(NULL);
   while (nbytes > 0) {
-    rc = writev(conn->sock, &iovec[0], 5);
+    rc = istgt_writev_socket(conn->sock, &iovec[0], 5);
     if (rc < 0) {
       now = time(NULL);
       ISTGT_ERRLOG("writev() failed (errno=%d,%s,time=%d)\n",
@@ -1710,7 +1702,6 @@ static int istgt_iscsi_append_param(CONN_Ptr conn,
 }
 
 int istgt_chap_get_authinfo(ISTGT_CHAP_AUTH* auth,
-                            const char* authfile,
                             const char* authuser,
                             int ag_tag) {
   CONFIG* config = NULL;
@@ -1732,7 +1723,8 @@ int istgt_chap_get_authinfo(ISTGT_CHAP_AUTH* auth,
 
   /* read config files */
   config = istgt_allocate_config();
-  rc = istgt_read_config(config, authfile);
+  rc = istgt_read_config(
+      config, sizeof AUTH_FILE / sizeof AUTH_FILE[0], AUTH_FILE);
   if (rc < 0) {
     ISTGT_ERRLOG("auth conf error\n");
     istgt_free_config(config);
@@ -1784,7 +1776,6 @@ int istgt_chap_get_authinfo(ISTGT_CHAP_AUTH* auth,
 }
 
 static int istgt_iscsi_get_authinfo(CONN_Ptr conn, const char* authuser) {
-  char* authfile = NULL;
   int ag_tag;
   int rc;
 
@@ -1802,17 +1793,12 @@ static int istgt_iscsi_get_authinfo(CONN_Ptr conn, const char* authuser) {
   }
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "ag_tag=%d\n", ag_tag);
 
-  MTX_LOCK(&conn->istgt->mutex);
-  authfile = xstrdup(conn->istgt->authfile);
-  MTX_UNLOCK(&conn->istgt->mutex);
-
-  rc = istgt_chap_get_authinfo(&conn->auth, authfile, authuser, ag_tag);
+  rc = istgt_chap_get_authinfo(&conn->auth, authuser, ag_tag);
   if (rc < 0) {
     ISTGT_ERRLOG("chap_get_authinfo() failed\n");
-    xfree(authfile);
     return -1;
   }
-  xfree(authfile);
+
   return 0;
 }
 
@@ -3257,50 +3243,52 @@ static int istgt_iscsi_op_logout(CONN_Ptr conn, ISCSI_PDU_Ptr pdu) {
     return -1;
   }
 
-  SESS_MTX_LOCK(conn);
-  if (ISCSI_EQVAL(conn->sess->params, "SessionType", "Normal")) {
-    snprintf(
-        buf,
-        sizeof buf,
-        "Logout from %s (%s) on %s LU%d"
-        " (%s:%s,%d), ISID=%" PRIx64
-        ", TSIH=%u,"
-        " CID=%u, HeaderDigest=%s, DataDigest=%s\n",
-        conn->initiator_name,
-        conn->initiator_addr,
-        conn->target_name,
-        conn->sess->lu->num,
-        conn->portal.host,
-        conn->portal.port,
-        conn->portal.tag,
-        conn->sess->isid,
-        conn->sess->tsih,
-        conn->cid,
-        (ISCSI_EQVAL(conn->params, "HeaderDigest", "CRC32C") ? "on" : "off"),
-        (ISCSI_EQVAL(conn->params, "DataDigest", "CRC32C") ? "on" : "off"));
-    ISTGT_NOTICELOG("%s", buf);
-  } else {
-    /* discovery session */
-    snprintf(
-        buf,
-        sizeof buf,
-        "Logout(discovery) from %s (%s) on"
-        " (%s:%s,%d), ISID=%" PRIx64
-        ", TSIH=%u,"
-        " CID=%u, HeaderDigest=%s, DataDigest=%s\n",
-        conn->initiator_name,
-        conn->initiator_addr,
-        conn->portal.host,
-        conn->portal.port,
-        conn->portal.tag,
-        conn->sess->isid,
-        conn->sess->tsih,
-        conn->cid,
-        (ISCSI_EQVAL(conn->params, "HeaderDigest", "CRC32C") ? "on" : "off"),
-        (ISCSI_EQVAL(conn->params, "DataDigest", "CRC32C") ? "on" : "off"));
-    ISTGT_NOTICELOG("%s", buf);
+  if (conn->sess != NULL) {
+    SESS_MTX_LOCK(conn);
+    if (ISCSI_EQVAL(conn->sess->params, "SessionType", "Normal")) {
+      snprintf(
+          buf,
+          sizeof buf,
+          "Logout from %s (%s) on %s LU%d"
+          " (%s:%s,%d), ISID=%" PRIx64
+          ", TSIH=%u,"
+          " CID=%u, HeaderDigest=%s, DataDigest=%s\n",
+          conn->initiator_name,
+          conn->initiator_addr,
+          conn->target_name,
+          conn->sess->lu->num,
+          conn->portal.host,
+          conn->portal.port,
+          conn->portal.tag,
+          conn->sess->isid,
+          conn->sess->tsih,
+          conn->cid,
+          (ISCSI_EQVAL(conn->params, "HeaderDigest", "CRC32C") ? "on" : "off"),
+          (ISCSI_EQVAL(conn->params, "DataDigest", "CRC32C") ? "on" : "off"));
+      ISTGT_NOTICELOG("%s", buf);
+    } else {
+      /* discovery session */
+      snprintf(
+          buf,
+          sizeof buf,
+          "Logout(discovery) from %s (%s) on"
+          " (%s:%s,%d), ISID=%" PRIx64
+          ", TSIH=%u,"
+          " CID=%u, HeaderDigest=%s, DataDigest=%s\n",
+          conn->initiator_name,
+          conn->initiator_addr,
+          conn->portal.host,
+          conn->portal.port,
+          conn->portal.tag,
+          conn->sess->isid,
+          conn->sess->tsih,
+          conn->cid,
+          (ISCSI_EQVAL(conn->params, "HeaderDigest", "CRC32C") ? "on" : "off"),
+          (ISCSI_EQVAL(conn->params, "DataDigest", "CRC32C") ? "on" : "off"));
+      ISTGT_NOTICELOG("%s", buf);
+    }
+    SESS_MTX_UNLOCK(conn);
   }
-  SESS_MTX_UNLOCK(conn);
 
   conn->exec_logout = 1;
   return 0;
@@ -5104,7 +5092,7 @@ static void wait_all_task(CONN_Ptr conn) {
     ISTGT_ERRLOG("kqueue() failed\n");
     return;
   }
-  ISTGT_EV_SET(&kev, conn->task_pipe[0], EVFILT_READ, EV_ADD, 0, 0, NULL);
+  ISTGT_EV_SET(&kev, conn->task_pipe.fd[0], EVFILT_READ, EV_ADD, 0, 0, NULL);
   rc = kevent(kq, &kev, 1, NULL, 0, NULL);
   if (rc == -1) {
     ISTGT_ERRLOG("kevent() failed\n");
@@ -5112,7 +5100,7 @@ static void wait_all_task(CONN_Ptr conn) {
     return;
   }
 #else
-  fds[0].fd = conn->task_pipe[0];
+  fds[0].fd = conn->task_pipe.fd[0];
   fds[0].events = POLLIN;
 #endif /* ISTGT_USE_KQUEUE */
 
@@ -5155,7 +5143,7 @@ static void wait_all_task(CONN_Ptr conn) {
 #endif /* ISTGT_USE_KQUEUE */
 
 #ifdef ISTGT_USE_KQUEUE
-    if (kev.ident == (uintptr_t) conn->task_pipe[0]) {
+    if (kev.ident == (uintptr_t) conn->task_pipe.fd[0]) {
       if (kev.flags & (EV_EOF | EV_ERROR)) {
         break;
       }
@@ -5167,7 +5155,9 @@ static void wait_all_task(CONN_Ptr conn) {
 #endif /* ISTGT_USE_KQUEUE */
       char tmp[1];
 
-      rc = read(conn->task_pipe[0], tmp, 1);
+      rc = istgt_control_pipe_read(&conn->task_pipe, tmp, 1);
+      printf("task %d %d\n", rc, (int) tmp[0]);
+
       if (rc < 0 || rc == 0 || rc != 1) {
         ISTGT_ERRLOG("read() failed\n");
         break;
@@ -5282,7 +5272,7 @@ static void worker_cleanup(CONN_Ptr conn) {
     pthread_cond_broadcast(&conn->result_queue_cond);
     pthread_join(conn->sender_thread, NULL);
   }
-  close(conn->sock);
+  istgt_close_socket(conn->sock);
 #ifdef ISTGT_USE_KQUEUE
   close(conn->kq);
   conn->kq = -1;
@@ -5358,7 +5348,7 @@ static void* sender(void* arg) {
               lu_task->lu_cmd.CmdSN,
               conn->target_port,
               conn->initiator_port);
-          rc = write(conn->task_pipe[1], "E", 1);
+          rc = istgt_control_pipe_write(&conn->task_pipe, "E", 1);
           if (rc < 0 || rc != 1) {
             ISTGT_ERRLOG("write() failed\n");
           }
@@ -5379,7 +5369,7 @@ static void* sender(void* arg) {
           ISTGT_ERRLOG("iscsi_write_pdu() failed on %s(%s)\n",
                        lu_task->conn->target_port,
                        lu_task->conn->initiator_port);
-          rc = write(conn->task_pipe[1], "E", 1);
+          rc = istgt_control_pipe_write(&conn->task_pipe, "E", 1);
           if (rc < 0 || rc != 1) {
             ISTGT_ERRLOG("write() failed\n");
           }
@@ -5394,7 +5384,7 @@ static void* sender(void* arg) {
           ISTGT_ERRLOG("update_pdu() failed on %s(%s)\n",
                        lu_task->conn->target_port,
                        lu_task->conn->initiator_port);
-          rc = write(conn->task_pipe[1], "E", 1);
+          rc = istgt_control_pipe_write(&conn->task_pipe, "E", 1);
           if (rc < 0 || rc != 1) {
             ISTGT_ERRLOG("write() failed\n");
           }
@@ -5426,7 +5416,6 @@ static void* worker(void* arg) {
   ISTGT_LU_TASK_Ptr lu_task;
   ISTGT_LU_Ptr lu;
   ISCSI_PDU_Ptr pdu;
-  sigset_t signew, sigold;
 #ifdef ISTGT_USE_KQUEUE
   int kq;
   struct kevent kev;
@@ -5467,7 +5456,7 @@ static void* worker(void* arg) {
     close(kq);
     return NULL;
   }
-  ISTGT_EV_SET(&kev, conn->task_pipe[0], EVFILT_READ, EV_ADD, 0, 0, NULL);
+  ISTGT_EV_SET(&kev, conn->task_pipe.fd[0], EVFILT_READ, EV_ADD, 0, 0, NULL);
   rc = kevent(kq, &kev, 1, NULL, 0, NULL);
   if (rc == -1) {
     ISTGT_ERRLOG("kevent() failed\n");
@@ -5495,7 +5484,7 @@ static void* worker(void* arg) {
   memset(&fds, 0, sizeof fds);
   fds[0].fd = conn->sock;
   fds[0].events = POLLIN;
-  fds[1].fd = conn->task_pipe[0];
+  fds[1].fd = conn->task_pipe.fd[0];
   fds[1].events = POLLIN;
 #endif /* ISTGT_USE_KQUEUE */
 
@@ -5506,27 +5495,17 @@ static void* worker(void* arg) {
   conn->exec_lu_task = NULL;
   lu_task = NULL;
 
-  conn->use_sender = 0;
-  if (conn->istgt->swmode >= ISTGT_SWMODE_NORMAL) {
-/* create sender thread */
-#ifdef ISTGT_STACKSIZE
-    rc = pthread_create(
-        &conn->sender_thread, &conn->istgt->attr, &sender, (void*) conn);
-#else
+  conn->use_sender = ISTGT_USE_SENDER_THREAD;
+  if (conn->use_sender) {
+    /* create sender thread */
     rc = pthread_create(&conn->sender_thread, NULL, &sender, (void*) conn);
-#endif
     if (rc != 0) {
       ISTGT_ERRLOG("pthread_create() failed\n");
       goto cleanup_exit;
     }
-    conn->use_sender = 1;
   }
-  conn->wsock = conn->sock;
 
-  sigemptyset(&signew);
-  sigemptyset(&sigold);
-  sigaddset(&signew, ISTGT_SIGWAKEUP);
-  pthread_sigmask(SIG_UNBLOCK, &signew, &sigold);
+  conn->wsock = conn->sock;
 
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "loop start (%d)\n", conn->id);
 #ifndef ISTGT_USE_KQUEUE
@@ -5752,7 +5731,7 @@ static void* worker(void* arg) {
 
 /* execute on task queue */
 #ifdef ISTGT_USE_KQUEUE
-    if (kev.ident == (uintptr_t) conn->task_pipe[0]) {
+    if (kev.ident == (uintptr_t) conn->task_pipe.fd[0]) {
       if (kev.flags & (EV_EOF | EV_ERROR)) {
         ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "kevent EOF/ERROR\n");
         break;
@@ -5767,7 +5746,7 @@ static void* worker(void* arg) {
 
       // ISTGT_TRACELOG(ISTGT_TRACE_SCSI, "Queue Task START\n");
 
-      rc = read(conn->task_pipe[0], tmp, 1);
+      rc = istgt_control_pipe_read(&conn->task_pipe, tmp, 1);
       if (rc < 0 || rc == 0 || rc != 1) {
         ISTGT_ERRLOG("read() failed\n");
         break;
@@ -5955,8 +5934,7 @@ int istgt_create_conn(ISTGT_Ptr istgt,
   for (i = 0; i < (conn->max_r2t + 1); i++) {
     conn->r2t_tasks[i] = NULL;
   }
-  conn->task_pipe[0] = -1;
-  conn->task_pipe[1] = -1;
+  conn->task_pipe = istgt_control_pipe_init();
   conn->max_task_queue = MAX_LU_QUEUE_DEPTH;
   istgt_queue_init(&conn->task_queue);
   istgt_queue_init(&conn->result_queue);
@@ -6041,24 +6019,21 @@ int istgt_create_conn(ISTGT_Ptr istgt,
   /* set low water mark */
   rc = istgt_set_recvlowat(conn->sock, ISCSI_BHS_LEN);
   if (rc != 0) {
-    ISTGT_ERRLOG("istgt_set_recvlowat() failed\n");
-    goto error_return;
+    ISTGT_WARNLOG("istgt_set_recvlowat() failed\n");
   }
 #endif
 
-  rc = pipe(conn->task_pipe);
+  rc = istgt_control_pipe_create(&conn->task_pipe);
   if (rc != 0) {
     ISTGT_ERRLOG("pipe() failed\n");
-    conn->task_pipe[0] = -1;
-    conn->task_pipe[1] = -1;
     goto error_return;
   }
-  rc = pthread_mutex_init(&conn->task_queue_mutex, &istgt->mutex_attr);
+  rc = pthread_mutex_init(&conn->task_queue_mutex, NULL);
   if (rc != 0) {
     ISTGT_ERRLOG("mutex_init() failed\n");
     goto error_return;
   }
-  rc = pthread_mutex_init(&conn->result_queue_mutex, &istgt->mutex_attr);
+  rc = pthread_mutex_init(&conn->result_queue_mutex, NULL);
   if (rc != 0) {
     ISTGT_ERRLOG("mutex_init() failed\n");
     goto error_return;
@@ -6078,7 +6053,7 @@ int istgt_create_conn(ISTGT_Ptr istgt,
     ISTGT_ERRLOG("cond_init() failed\n");
     goto error_return;
   }
-  rc = pthread_mutex_init(&conn->r2t_mutex, &istgt->mutex_attr);
+  rc = pthread_mutex_init(&conn->r2t_mutex, NULL);
   if (rc != 0) {
     ISTGT_ERRLOG("mutex_init() failed\n");
     goto error_return;
@@ -6148,10 +6123,7 @@ int istgt_create_conn(ISTGT_Ptr istgt,
   if (rc < 0) {
     ISTGT_ERRLOG("no free conn slot available\n");
   error_return:
-    if (conn->task_pipe[0] != -1)
-      close(conn->task_pipe[0]);
-    if (conn->task_pipe[1] != -1)
-      close(conn->task_pipe[1]);
+    istgt_control_pipe_destroy(&conn->task_pipe);
     istgt_iscsi_param_free(conn->params);
     istgt_queue_destroy(&conn->pending_pdus);
     istgt_queue_destroy(&conn->task_queue);
@@ -6167,12 +6139,8 @@ int istgt_create_conn(ISTGT_Ptr istgt,
     return -1;
   }
 
-/* create new thread */
-#ifdef ISTGT_STACKSIZE
-  rc = pthread_create(&conn->thread, &istgt->attr, &worker, (void*) conn);
-#else
+  /* create new thread */
   rc = pthread_create(&conn->thread, NULL, &worker, (void*) conn);
-#endif /* ISTGT_STACKSIZE */
   if (rc != 0) {
     ISTGT_ERRLOG("pthread_create() failed\n");
     goto error_return;
@@ -6482,10 +6450,7 @@ static void istgt_free_sess(SESS_Ptr sess) {
 static void istgt_free_conn(CONN_Ptr conn) {
   if (conn == NULL)
     return;
-  if (conn->task_pipe[0] != -1)
-    close(conn->task_pipe[0]);
-  if (conn->task_pipe[1] != -1)
-    close(conn->task_pipe[1]);
+  istgt_control_pipe_destroy(&conn->task_pipe);
   (void) pthread_mutex_destroy(&conn->task_queue_mutex);
   (void) pthread_mutex_destroy(&conn->result_queue_mutex);
   (void) pthread_cond_destroy(&conn->result_queue_cond);
@@ -6636,7 +6601,7 @@ static int istgt_iscsi_drop_all_conns(CONN_Ptr conn) {
                  xconn->initiator_addr,
                  xconn->cid);
         }
-        rc = write(xconn->task_pipe[1], "E", 1);
+        rc = istgt_control_pipe_write(&conn->task_pipe, "E", 1);
         if (rc < 0 || rc != 1) {
           ISTGT_ERRLOG("write() failed\n");
           continue;
@@ -6725,7 +6690,7 @@ static int istgt_iscsi_drop_old_conns(CONN_Ptr conn) {
                  xconn->initiator_addr,
                  xconn->cid);
         }
-        rc = write(xconn->task_pipe[1], "E", 1);
+        rc = istgt_control_pipe_write(&xconn->task_pipe, "E", 1);
         if (rc < 0 || rc != 1) {
           ISTGT_ERRLOG("write() failed\n");
           continue;
@@ -6792,7 +6757,7 @@ int istgt_stop_conns(void) {
     conn = g_conns[i];
     if (conn == NULL)
       continue;
-    rc = write(conn->task_pipe[1], tmp, 1);
+    rc = istgt_control_pipe_write(&conn->task_pipe, tmp, 1);
     if (rc < 0 || rc != 1) {
       ISTGT_ERRLOG("write() failed\n");
       /* ignore error */

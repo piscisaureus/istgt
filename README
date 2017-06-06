@@ -36,19 +36,6 @@ downloaded below.
 The latest version is available at:
 http://shell.peach.ne.jp/aoyama/
 
-For FreeBSD initiator, please check here:
-ftp://ftp.cs.huji.ac.il/users/danny/freebsd/
-
-Using path-through tape drive from Microsoft iSCSI Initiator:
-open registry of initiator by regedit.exe.
-change the value of MaxTransferLength to 0x10000 (65536).
-reboot Windows.
-(0000 is an instance number. It might be a different value.)
-
-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\
-{4D36E97B-E325-11CE-BFC1-08002BE10318}\0000\Parameters\
-MaxTransferLength
-
 Timeout of Microsoft iSCSI Initiator:
 If you want fast recovery from failure, try to decrease the value in
 above registry:
@@ -60,12 +47,6 @@ DelayBetweenReconnect
 If you want to keep failed command, try to increase:
 MaxRequestHoldTime
 SrbTimeoutDelta
-
-
-External Libs:
- o OpenSSL (shipped with FreeBSD)
- o CAM (shipped with FreeBSD)
- o VirtualBox 4.x DSO (if use --with-vbox configure option)
 
 Tested Initiators:
  o Microsoft Windows Server 2012 R2 (builtin)
@@ -116,15 +97,8 @@ Features:
  (experimental features)
  o Command Queuing (up to 255 depth, 32 by default)
  o iSCSI boot with Intel PRO/1000 Server Adapters
- o virtual DVD-ROM and virtual tape drive (DLT emulator)
- o pass-through device (only support DA/SA/CD/CH type)
 
 Current Limitations:
- o can't create empty VirtualBox VirtualDisk.
- o The parameters other than PG, IG, and LU are not reloaded by SIGHUP.
- o PG and IG mapped to LU can't be deleted by SIGHUP.
- o LU connected by the initiator can't be reloaded by SIGHUP.
- o If you delete an active LU, all connections of the LU are closed by SIGHUP.
  o Updating IG is not affected until the next login.
  o logical unit is sharing with exclusive lock
  o exclusive port w/asynchronous operation

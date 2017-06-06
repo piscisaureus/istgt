@@ -28,11 +28,12 @@
 #ifndef ISTGT_ISCSI_H
 #define ISTGT_ISCSI_H
 
-#include <pthread.h>
 #include <stdint.h>
 #include "istgt.h"
+#include "istgt_control_pipe.h"
 #include "istgt_iscsi_param.h"
 #include "istgt_lu.h"
+#include "istgt_platform.h"
 #include "istgt_queue.h"
 
 #define ISCSI_BHS_LEN 48
@@ -239,7 +240,7 @@ typedef struct istgt_conn_t {
   pthread_mutex_t r2t_mutex;
   ISTGT_R2T_TASK_Ptr* r2t_tasks;
 
-  int task_pipe[2];
+  istgt_control_pipe_t task_pipe;
   int max_task_queue;
   pthread_mutex_t task_queue_mutex;
   ISTGT_QUEUE task_queue;

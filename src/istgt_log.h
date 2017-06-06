@@ -79,8 +79,6 @@
 #define ISTGT_TRACEDUMP(FLAG, LABEL, BUF, LEN)
 #endif /* DEBUG */
 
-int istgt_set_log_facility(const char* facility);
-int istgt_set_log_priority(const char* priority);
 void istgt_log(const char* file,
                const int line,
                const char* func,
@@ -107,10 +105,7 @@ void istgt_warnlog(const char* file,
                    const char* func,
                    const char* format,
                    ...) __attribute__((__format__(__printf__, 4, 5)));
-void istgt_open_log(void);
-void istgt_close_log(void);
-void istgtcontrol_open_log(void);
-void istgtcontrol_close_log(void);
+
 void istgt_set_trace_flag(int flag);
 void istgt_trace_dump(int flag,
                       const char* label,

@@ -29,20 +29,15 @@
 #include "config.h"
 #endif
 
+#include <assert.h>
 #include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <poll.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "istgt.h"
 #include "istgt_log.h"
 #include "istgt_misc.h"
+#include "istgt_platform.h"
 #include "istgt_sock.h"
 
 //#define USE_POLLWAIT
@@ -145,12 +140,12 @@ int istgt_listen(const char* ip, int port) {
       /* error */
       continue;
     }
-    rc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
+    rc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void*) &val, sizeof val);
     if (rc != 0) {
       /* error */
       continue;
     }
-    rc = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val);
+    rc = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void*) &val, sizeof val);
     if (rc != 0) {
       /* error */
       continue;
@@ -232,7 +227,7 @@ int istgt_connect(const char* host, int port) {
       /* error */
       continue;
     }
-    rc = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val);
+    rc = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void*) &val, sizeof val);
     if (rc != 0) {
       /* error */
       continue;
@@ -268,7 +263,7 @@ int istgt_set_recvtimeout(int s, int msec) {
   memset(&tv, 0, sizeof tv);
   tv.tv_sec = msec / 1000;
   tv.tv_usec = (msec % 1000) * 1000;
-  rc = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+  rc = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (void*) &tv, sizeof tv);
   if (rc != 0)
     return -1;
   return 0;
@@ -281,21 +276,22 @@ int istgt_set_sendtimeout(int s, int msec) {
   memset(&tv, 0, sizeof tv);
   tv.tv_sec = msec / 1000;
   tv.tv_usec = (msec % 1000) * 1000;
-  rc = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+  rc = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (void*) &tv, sizeof tv);
   if (rc != 0)
     return -1;
   return 0;
 }
 
 int istgt_set_recvlowat(int s, int nbytes) {
-  int val;
-  int rc;
+#ifndef _WIN32
+  int val = nbytes;
+  return setsockopt(s, SOL_SOCKET, SO_RCVLOWAT, (void*) &val, sizeof val);
 
-  val = nbytes;
-  rc = setsockopt(s, SOL_SOCKET, SO_RCVLOWAT, &val, sizeof val);
-  if (rc != 0)
-    return -1;
-  return 0;
+#else   // _WIN32
+  // Not supported on Windows.
+  WSASetLastError(WSAENOPROTOOPT);
+  return -1;
+#endif  // _WIN32
 }
 
 #ifdef USE_POLLWAIT
@@ -651,4 +647,71 @@ ssize_t istgt_writeline_socket(int sock, const char* buf, int timeout) {
   }
 
   return total;
+}
+
+
+ssize_t istgt_readv_socket(int fd, const struct iovec* iov, int iovcnt) {
+#ifndef _WIN32
+  return readv(fd, iov, iovcnt);
+
+#else   // _WIN32
+  assert((fd & 3) == 0 && "Probably not a socket");
+
+  WSABUF* buf = _alloca(sizeof *buf * iovcnt);
+  DWORD buf_count = 0;
+  for (int i = 0; i < iovcnt; i++) {
+    if (iov[i].iov_len > 0) {
+      buf[buf_count].buf = iov[i].iov_base;
+      buf[buf_count].len = iov[i].iov_len;
+      buf_count++;
+    }
+  }
+
+  DWORD bytes_received;
+  DWORD flags = 0;
+  if (WSARecv(fd, buf, buf_count, &bytes_received, &flags, NULL, NULL) ==
+      SOCKET_ERROR)
+    return -1;
+  return bytes_received;
+#endif  // _WIN32
+}
+
+
+ssize_t istgt_writev_socket(int fd, const struct iovec* iov, int iovcnt) {
+#ifndef _WIN32
+  return writev(fd, iov, iovcnt);
+
+#else   // _WIN32
+  assert((fd & 3) == 0 && "Probably not a socket");
+
+  WSABUF* buf = _alloca(sizeof *buf * iovcnt);
+  DWORD buf_count = 0;
+  for (int i = 0; i < iovcnt; i++) {
+    if (iov[i].iov_len > 0) {
+      buf[buf_count].buf = iov[i].iov_base;
+      buf[buf_count].len = iov[i].iov_len;
+      buf_count++;
+    }
+  }
+
+  DWORD bytes_sent;
+  if (WSASend(fd, buf, buf_count, &bytes_sent, 0, NULL, NULL) ==
+      SOCKET_ERROR) {
+    DWORD err = WSAGetLastError();
+
+    if (WSAGetLastError() == WSAEWOULDBLOCK)
+      return 0;
+    return -1;
+  }
+
+  return bytes_sent;
+#endif  // _WIN32
+}
+
+void istgt_close_socket(int fd) {
+#ifdef _WIN32
+  closesocket(fd);
+#else   // _WIN32
+  close(fd);
+#endif  // WIN32
 }

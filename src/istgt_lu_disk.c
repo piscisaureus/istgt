@@ -33,17 +33,11 @@
 #include <stdint.h>
 
 #include <errno.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 #include <fcntl.h>
-#include <unistd.h>
-
-#ifdef HAVE_UUID_H
-#include <uuid.h>
-#endif
 
 #include "istgt.h"
 #include "istgt_conf.h"
@@ -53,6 +47,7 @@
 #include "istgt_lu.h"
 #include "istgt_md5.h"
 #include "istgt_misc.h"
+#include "istgt_platform.h"
 #include "istgt_proto.h"
 #include "istgt_queue.h"
 #include "istgt_scsi.h"
@@ -107,7 +102,6 @@ static int istgt_lu_disk_queue_abort_ITL(ISTGT_LU_DISK* spec,
 
 static int istgt_lu_disk_open_raw(ISTGT_LU_DISK* spec, int flags, int mode) {
   int rc;
-
   rc = open(spec->file, flags, mode);
   if (rc < 0) {
     return -1;
@@ -147,12 +141,18 @@ istgt_lu_disk_lseek_raw(ISTGT_LU_DISK *spec, off_t offset, int whence)
 #endif
 
 static int64_t istgt_lu_disk_seek_raw(ISTGT_LU_DISK* spec, uint64_t offset) {
-  off_t rc;
+  fprintf(stderr, "Seek: %lld\n", (unsigned long long) offset);
 
-  rc = lseek(spec->fd, (off_t) offset, SEEK_SET);
+#ifndef _WIN32
+  // On windows we use the moral equivalent of pread/pwrite, so no need
+  // actually seek before read/write.
+  off_t rc = lseek(spec->fd, (off_t) offset, SEEK_SET);
   if (rc < 0) {
     return -1;
   }
+  if (rc != offset)
+    abort();
+#endif  // !_WIN32
   spec->foffset = offset;
   return 0;
 }
@@ -161,56 +161,33 @@ static int64_t istgt_lu_disk_read_raw(ISTGT_LU_DISK* spec,
                                       void* buf,
                                       uint64_t nbytes) {
   int64_t rc;
+  fprintf(stderr, "Read: %d\n", (int) nbytes);
 
-  if (spec->lu->istgt->swmode >= ISTGT_SWMODE_EXPERIMENTAL) {
-    if (spec->foffset + nbytes <= spec->fsize) {
-      /* inside media */
-      rc = (int64_t) read(spec->fd, buf, (size_t) nbytes);
-    } else if (spec->foffset >= spec->fsize) {
-      /* outside media */
+#ifdef _WIN32
+  OVERLAPPED o = {0};
+  LARGE_INTEGER offset = {.QuadPart = spec->foffset};
+  o.Offset = offset.LowPart;
+  o.OffsetHigh = offset.HighPart;
+  HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
+  DWORD bytes_read;
+  if (!ReadFile(handle, buf, nbytes, &bytes_read, &o)) {
+    if (GetLastError() == ERROR_HANDLE_EOF) {
       memset(buf, 0, nbytes);
       rc = nbytes;
-      if (spec->foffset + nbytes >= spec->size) {
-        rc = spec->size - spec->foffset;
-      }
-    } else if (spec->foffset + nbytes > spec->fsize) {
-      /* both */
-      uint64_t request = spec->fsize - spec->foffset;
-      memset(buf, 0, nbytes);
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                     "read %" PRIu64 " bytes at %" PRIu64 "/%" PRIu64 "\n",
-                     request,
-                     spec->foffset,
-                     spec->fsize);
-      rc = (int64_t) read(spec->fd, buf, (size_t) request);
-      if (rc < 0) {
-        return -1;
-      }
-      if ((uint64_t) rc != request) {
-        /* read size < request */
-        if (spec->foffset + rc >= spec->size) {
-          rc = spec->size - spec->foffset;
-        }
-        spec->foffset += rc;
-        return rc;
-      }
-      rc = nbytes;
-      if (spec->foffset + nbytes >= spec->size) {
-        rc = spec->size - spec->foffset;
-      }
     } else {
-      rc = -1;
-    }
-    if (rc < 0) {
       return -1;
     }
-    spec->foffset += rc;
-    return rc;
+  } else {
+    rc = bytes_read;
   }
+
+#else   // _WIN32
   rc = (int64_t) read(spec->fd, buf, (size_t) nbytes);
   if (rc < 0) {
     return -1;
   }
+#endif  // _WIN32
+
   spec->foffset += rc;
   return rc;
 }
@@ -219,59 +196,27 @@ static int64_t istgt_lu_disk_write_raw(ISTGT_LU_DISK* spec,
                                        const void* buf,
                                        uint64_t nbytes) {
   int64_t rc;
+  fprintf(stderr, "Write: %d\n", (int) nbytes);
 
-  if (spec->lu->istgt->swmode >= ISTGT_SWMODE_EXPERIMENTAL) {
-    if (spec->foffset + nbytes <= spec->fsize) {
-      /* inside media */
-      rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
-    } else if (spec->foffset + nbytes <= ISTGT_LU_MEDIA_SIZE_MIN) {
-      /* allways write in minimum size */
-      rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
-    } else if (spec->foffset >= spec->fsize) {
-      /* outside media */
-      const uint8_t* p = (const uint8_t*) buf;
-      uint64_t n;
-      for (n = 0; n < nbytes; n++) {
-        if (p[n] != 0)
-          break;
-      }
-      if (n == nbytes) {
-        /* write all zero (skip) */
-        ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                       "write zero %" PRIu64 " bytes at %" PRIu64 "/%" PRIu64
-                       "\n",
-                       nbytes,
-                       spec->foffset,
-                       spec->fsize);
-        rc = nbytes;
-        spec->foffset += rc;
-        return rc;
-      }
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                     "write %" PRIu64 " bytes at %" PRIu64 "/%" PRIu64 "\n",
-                     nbytes,
-                     spec->foffset,
-                     spec->fsize);
-      rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
-    } else if (spec->foffset + nbytes > spec->fsize) {
-      /* both */
-      rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
-    } else {
-      rc = -1;
-    }
-    if (rc < 0) {
-      return -1;
-    }
-    spec->foffset += rc;
-    if (spec->foffset > spec->fsize) {
-      spec->fsize = spec->foffset;
-    }
-    return rc;
-  }
-  rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
-  if (rc < 0) {
+#ifdef _WIN32
+  OVERLAPPED o = {0};
+  LARGE_INTEGER offset = {.QuadPart = spec->foffset};
+  o.Offset = offset.LowPart;
+  o.OffsetHigh = offset.HighPart;
+  HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
+  DWORD bytes_written;
+  if (!WriteFile(handle, buf, nbytes, &bytes_written, &o))
     return -1;
-  }
+
+  rc = bytes_written;
+
+#else   // _WIN32
+  rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
+  if (rc < 0)
+    return -1;
+#endif  // _WIN32
+
+
   spec->foffset += rc;
   if (spec->foffset > spec->fsize) {
     spec->fsize = spec->foffset;
@@ -282,14 +227,15 @@ static int64_t istgt_lu_disk_write_raw(ISTGT_LU_DISK* spec,
 static int64_t istgt_lu_disk_sync_raw(ISTGT_LU_DISK* spec,
                                       uint64_t offset,
                                       uint64_t nbytes) {
-  int64_t rc;
+  /*int64_t rc;
 
   rc = (int64_t) fsync(spec->fd);
   if (rc < 0) {
-    return -1;
+          return -1;
   }
   spec->foffset = offset + nbytes;
-  return rc;
+  return rc; */
+  return 0;
 }
 
 static int istgt_lu_disk_allocate_raw(ISTGT_LU_DISK* spec) {
@@ -328,51 +274,28 @@ static int istgt_lu_disk_allocate_raw(ISTGT_LU_DISK* spec) {
     xfree(data);
     return -1;
   }
-  if (spec->lu->istgt->swmode >= ISTGT_SWMODE_EXPERIMENTAL) {
-    /* allocate minimum size */
-    if (fsize < ISTGT_LU_MEDIA_SIZE_MIN) {
-      fsize = ISTGT_LU_MEDIA_SIZE_MIN;
-      if (size < ISTGT_LU_MEDIA_SIZE_MIN) {
-        fsize = size;
-      }
-      offset = fsize - nbytes;
-      rc = istgt_lu_disk_seek_raw(spec, offset);
-      if (rc == -1) {
-        ISTGT_ERRLOG("lu_disk_seek() failed\n");
-        xfree(data);
-        return -1;
-      }
-      rc = istgt_lu_disk_write_raw(spec, data, nbytes);
-      if (rc == -1 || (uint64_t) rc != nbytes) {
-        ISTGT_ERRLOG("lu_disk_write() failed\n");
-        xfree(data);
-        return -1;
-      }
-      spec->fsize = fsize;
-      spec->foffset = fsize;
-    }
-  } else {
-    /* allocate complete size */
-    rc = istgt_lu_disk_seek_raw(spec, offset);
-    if (rc == -1) {
-      ISTGT_ERRLOG("lu_disk_seek() failed\n");
-      xfree(data);
-      return -1;
-    }
-    rc = istgt_lu_disk_write_raw(spec, data, nbytes);
-    if (rc == -1 || (uint64_t) rc != nbytes) {
-      ISTGT_ERRLOG("lu_disk_write() failed\n");
-      xfree(data);
-      return -1;
-    }
-    spec->foffset = size;
+
+  /* allocate complete size */
+  rc = istgt_lu_disk_seek_raw(spec, offset);
+  if (rc == -1) {
+    ISTGT_ERRLOG("lu_disk_seek() failed\n");
+    xfree(data);
+    return -1;
   }
+  rc = istgt_lu_disk_write_raw(spec, data, nbytes);
+  if (rc == -1 || (uint64_t) rc != nbytes) {
+    ISTGT_ERRLOG("lu_disk_write() failed\n");
+    xfree(data);
+    return -1;
+  }
+  spec->foffset = size;
 
   xfree(data);
   return 0;
 }
 
 static int istgt_lu_disk_setcache_raw(ISTGT_LU_DISK* spec) {
+#ifndef _WIN32
   int flags;
   int rc;
   int fd;
@@ -385,6 +308,7 @@ static int istgt_lu_disk_setcache_raw(ISTGT_LU_DISK* spec) {
   } else {
     /* not implement */
   }
+
   flags = fcntl(fd, F_GETFL, 0);
   if (flags != -1) {
     if (spec->write_cache) {
@@ -408,6 +332,8 @@ static int istgt_lu_disk_setcache_raw(ISTGT_LU_DISK* spec) {
                  spec->lun,
                  errno);
   }
+#endif  // _WIN32
+
   return 0;
 }
 
@@ -442,9 +368,6 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
   ISTGT_LU_DISK* spec;
   uint64_t gb_size;
   uint64_t mb_size;
-#ifdef HAVE_UUID_H
-  uint32_t status;
-#endif /* HAVE_UUID_H */
   int mb_digit;
   int flags;
   int newfile;
@@ -483,14 +406,9 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
     } else {
       spec->write_cache = 0;
     }
-    if (spec->lu->istgt->swmode >= ISTGT_SWMODE_EXPERIMENTAL) {
-      spec->wbufsize = ISTGT_LU_MAX_WRITE_CACHE_SIZE;
-      spec->wbuf = xmalloc(spec->wbufsize);
-      memset(spec->wbuf, 0, spec->wbufsize);
-    } else {
-      spec->wbufsize = 0;
-      spec->wbuf = NULL;
-    }
+
+    spec->wbufsize = 0;
+    spec->wbuf = NULL;
     spec->woffset = 0;
     spec->wnbytes = 0;
     spec->req_write_cache = 0;
@@ -506,7 +424,7 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
     }
 
     spec->queue_depth = lu->queue_depth;
-    rc = pthread_mutex_init(&spec->cmd_queue_mutex, &istgt->mutex_attr);
+    rc = pthread_mutex_init(&spec->cmd_queue_mutex, NULL);
     if (rc != 0) {
       ISTGT_ERRLOG("LU%d: mutex_init() failed\n", lu->num);
       return -1;
@@ -542,19 +460,6 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
       spec->sense = (((sk & 0xffU) << 16) | ((asc & 0xffU) << 8) |
                      ((ascq & 0xffU) << 0));
     }
-
-#ifdef HAVE_UUID_H
-    uuid_create(&spec->uuid, &status);
-    if (status != uuid_s_ok) {
-      ISTGT_ERRLOG("LU%d: LUN%d: uuid_create() failed\n", lu->num, i);
-      (void) pthread_mutex_destroy(&spec->wait_lu_task_mutex);
-      (void) pthread_mutex_destroy(&spec->cmd_queue_mutex);
-      (void) pthread_mutex_destroy(&spec->ats_mutex);
-      istgt_queue_destroy(&spec->cmd_queue);
-      xfree(spec);
-      return -1;
-    }
-#endif /* HAVE_UUID_H */
 
     spec->file = lu->lun[i].u.storage.file;
     spec->size = lu->lun[i].u.storage.size;
@@ -878,20 +783,6 @@ void istgt_strcpy_pad(uint8_t* dst, size_t size, const char* src, int pad) {
   }
 }
 
-#ifdef HAVE_UUID_H
-uint64_t istgt_uuid2uint64(uuid_t* uuid) {
-  uint64_t low, mid, hi;
-  uint64_t r;
-
-  low = (uint64_t) uuid->time_low;
-  mid = (uint64_t) uuid->time_mid;
-  hi = (uint64_t) uuid->time_hi_and_version;
-  r = (hi & 0xffffULL) << 48;
-  r |= (mid & 0xffffULL) << 32;
-  r |= (low & 0xffffffffULL);
-  return r;
-}
-#endif /* HAVE_UUID_H */
 
 uint64_t istgt_get_lui(const char* name, int lun) {
   char buf[MAX_TMPBUF];
@@ -1085,11 +976,7 @@ static int istgt_lu_disk_scsi_inquiry(ISTGT_LU_DISK* spec,
   pd = SPC_PERIPHERAL_DEVICE_TYPE_DISK;
   rmb = 0;
 
-#if 0
-	LUI = istgt_uuid2uint64(&spec->uuid);
-#else
   LUI = istgt_get_lui(spec->lu->name, spec->lun & 0xffffU);
-#endif
 
   pc = cdb[2];
   evpd = BGET8(&cdb[1], 0);
@@ -1566,10 +1453,6 @@ static int istgt_lu_disk_scsi_inquiry(ISTGT_LU_DISK* spec,
           blocks = 0xff;
         }
         data[5] = (uint8_t) blocks;
-        if (spec->lu->istgt->swmode == ISTGT_SWMODE_TRADITIONAL) {
-          /* no support compare and write */
-          data[5] = 0;
-        }
 
         /* force align to 4KB */
         if (spec->blocklen < 4096) {
@@ -1783,7 +1666,6 @@ static int istgt_lu_disk_scsi_mode_sense_page(ISTGT_LU_DISK* spec,
   uint8_t* cp;
   int len = 0;
   int plen;
-  int rc;
   int i;
 
 #if 0
@@ -1871,14 +1753,18 @@ static int istgt_lu_disk_scsi_mode_sense_page(ISTGT_LU_DISK* spec,
       BDADD8(&cp[2], 1, 2); /* WCE */
       // BDADD8(&cp[2], 1, 0); /* RCD */
       {
+#ifdef _WIN32
+        BDADD8(&cp[2], 0, 2); /* WCE=0 */
+#else                         // _WIN32
         int fd;
         fd = spec->fd;
-        rc = fcntl(fd, F_GETFL, 0);
+        int rc = fcntl(fd, F_GETFL, 0);
         if (rc != -1 && !(rc & O_FSYNC)) {
           BDADD8(&cp[2], 1, 2); /* WCE=1 */
         } else {
           BDADD8(&cp[2], 0, 2); /* WCE=0 */
         }
+#endif                        // _WIN32
       }
       if (spec->read_cache == 0) {
         BDADD8(&cp[2], 1, 0); /* RCD=1 */
@@ -2279,6 +2165,7 @@ static int istgt_lu_disk_scsi_mode_select_page(ISTGT_LU_DISK* spec,
         rcd = BGET8(&data[2], 0); /* RCD */
 
         {
+#ifndef _WIN32
           int fd;
           fd = spec->fd;
           rc = fcntl(fd, F_GETFL, 0);
@@ -2297,6 +2184,7 @@ static int istgt_lu_disk_scsi_mode_select_page(ISTGT_LU_DISK* spec,
               // ISTGT_ERRLOG("fcntl(F_SETFL) failed\n");
             }
           }
+#endif  // _WIN32
         }
         if (rcd) {
           ISTGT_TRACELOG(ISTGT_TRACE_SCSI, "MODE_SELECT Read cache disable\n");
@@ -5299,7 +5187,7 @@ int istgt_lu_disk_queue_start(ISTGT_LU_Ptr lu, int lun) {
           ISTGT_ERRLOG("queue_enqueue() failed\n");
           goto error_return;
         }
-        rc = write(conn->task_pipe[1], tmp, 1);
+        rc = istgt_control_pipe_write(&conn->task_pipe, tmp, 1);
         if (rc < 0 || rc != 1) {
           ISTGT_ERRLOG("write() failed\n");
           goto error_return;
@@ -5379,7 +5267,7 @@ int istgt_lu_disk_queue_start(ISTGT_LU_Ptr lu, int lun) {
         ISTGT_ERRLOG("queue_enqueue() failed\n");
         goto error_return;
       }
-      rc = write(conn->task_pipe[1], tmp, 1);
+      rc = istgt_control_pipe_write(&conn->task_pipe, tmp, 1);
       if (rc < 0 || rc != 1) {
         MTX_UNLOCK(&lu_task->trans_mutex);
         ISTGT_ERRLOG("write() failed\n");
@@ -5479,7 +5367,7 @@ int istgt_lu_disk_queue_start(ISTGT_LU_Ptr lu, int lun) {
           ISTGT_ERRLOG("queue_enqueue() failed\n");
           goto error_return;
         }
-        rc = write(conn->task_pipe[1], tmp, 1);
+        rc = istgt_control_pipe_write(&conn->task_pipe, tmp, 1);
         if (rc < 0 || rc != 1) {
           ISTGT_ERRLOG("write() failed\n");
           goto error_return;
@@ -5543,7 +5431,7 @@ int istgt_lu_disk_queue_start(ISTGT_LU_Ptr lu, int lun) {
         ISTGT_ERRLOG("queue_enqueue() failed\n");
         goto error_return;
       }
-      rc = write(conn->task_pipe[1], tmp, 1);
+      rc = istgt_control_pipe_write(&conn->task_pipe, tmp, 1);
       if (rc < 0 || rc != 1) {
         ISTGT_ERRLOG("write() failed\n");
         goto error_return;
@@ -6624,12 +6512,6 @@ int istgt_lu_disk_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd) {
 #if 0
 			istgt_scsi_dump_cdb(cdb);
 #endif
-      if (spec->lu->istgt->swmode == ISTGT_SWMODE_TRADITIONAL) {
-        /* INVALID COMMAND OPERATION CODE */
-        BUILD_SENSE(ILLEGAL_REQUEST, 0x20, 0x00);
-        lu_cmd->status = ISTGT_SCSI_STATUS_CHECK_CONDITION;
-        break;
-      }
       if (spec->rsv_key) {
         rc = istgt_lu_disk_check_pr(spec, conn, PR_ALLOW(0, 0, 1, 0, 0));
         if (rc != 0) {

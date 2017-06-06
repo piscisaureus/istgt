@@ -33,22 +33,12 @@
 #include <stdint.h>
 
 #include <errno.h>
-#include <poll.h>
-#include <pthread.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef HAVE_PTHREAD_NP_H
-#include <pthread_np.h>
-#endif
-#include <fcntl.h>
-#include <signal.h>
-#include <unistd.h>
-
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 
 #include "istgt.h"
 #include "istgt_conf.h"
@@ -57,9 +47,12 @@
 #include "istgt_log.h"
 #include "istgt_lu.h"
 #include "istgt_misc.h"
+#include "istgt_platform.h"
 #include "istgt_proto.h"
 #include "istgt_sock.h"
 #include "istgt_ver.h"
+
+#include "config_file.h"
 
 #ifdef ISTGT_USE_KQUEUE
 #include <sys/event.h>
@@ -872,168 +865,6 @@ static void istgt_destory_initiator_group_array(ISTGT_Ptr istgt) {
   MTX_UNLOCK(&istgt->mutex);
 }
 
-static int istgt_build_uctl_portal(ISTGT_Ptr istgt) {
-  CF_SECTION* sp;
-  const char* val;
-  char *label, *portal, *host, *port;
-  int tag;
-  int idx;
-  int rc;
-  int i;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_build_uctl_portal\n");
-
-  sp = istgt_find_cf_section(istgt->config, "UnitControl");
-  if (sp == NULL) {
-    ISTGT_ERRLOG("find_cf_section failed()\n");
-    return -1;
-  }
-
-  for (i = 0;; i++) {
-    val = istgt_get_nval(sp, "Portal", i);
-    if (val == NULL)
-      break;
-
-    label = istgt_get_nmval(sp, "Portal", i, 0);
-    portal = istgt_get_nmval(sp, "Portal", i, 1);
-    if (label == NULL || portal == NULL) {
-      ISTGT_ERRLOG("uctl portal error\n");
-      return -1;
-    }
-
-    rc = istgt_parse_portal(portal, &host, &port);
-    if (rc < 0) {
-      ISTGT_ERRLOG("parse uctl portal error\n");
-      return -1;
-    }
-
-    idx = istgt->nuctl_portal;
-    tag = ISTGT_UC_TAG;
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                   "Index=%d, Host=%s, Port=%s, Tag=%d\n",
-                   idx,
-                   host,
-                   port,
-                   tag);
-    if (idx < MAX_UCPORTAL) {
-      istgt->uctl_portal[idx].label = xstrdup(label);
-      istgt->uctl_portal[idx].host = host;
-      istgt->uctl_portal[idx].port = port;
-      istgt->uctl_portal[idx].ref = 0;
-      istgt->uctl_portal[idx].idx = idx;
-      istgt->uctl_portal[idx].tag = tag;
-      istgt->uctl_portal[idx].sock = -1;
-      idx++;
-      istgt->nuctl_portal = idx;
-    } else {
-      ISTGT_ERRLOG("nportal(%d) >= MAX_UCPORTAL\n", idx);
-      xfree(host);
-      xfree(port);
-      return -1;
-    }
-  }
-
-  return 0;
-}
-
-static void istgt_destroy_uctl_portal(ISTGT_Ptr istgt) {
-  int i;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_destroy_uctl_portal\n");
-  for (i = 0; i < istgt->nuctl_portal; i++) {
-    xfree(istgt->uctl_portal[i].label);
-    xfree(istgt->uctl_portal[i].host);
-    xfree(istgt->uctl_portal[i].port);
-
-    istgt->uctl_portal[i].label = NULL;
-    istgt->uctl_portal[i].host = NULL;
-    istgt->uctl_portal[i].port = NULL;
-    istgt->uctl_portal[i].ref = 0;
-    istgt->uctl_portal[i].idx = i;
-    istgt->uctl_portal[i].tag = 0;
-  }
-  istgt->nuctl_portal = 0;
-}
-
-static int istgt_open_uctl_portal(ISTGT_Ptr istgt) {
-  int port;
-  int sock;
-  int i;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_open_uctl_portal\n");
-  for (i = 0; i < istgt->nuctl_portal; i++) {
-    if (istgt->uctl_portal[i].sock < 0) {
-      ISTGT_TRACELOG(ISTGT_TRACE_NET,
-                     "open host %s, port %s, tag %d\n",
-                     istgt->uctl_portal[i].host,
-                     istgt->uctl_portal[i].port,
-                     istgt->uctl_portal[i].tag);
-      port = (int) strtol(istgt->uctl_portal[i].port, NULL, 0);
-      sock = istgt_listen(istgt->uctl_portal[i].host, port);
-      if (sock < 0) {
-        ISTGT_ERRLOG(
-            "listen error %.64s:%d\n", istgt->uctl_portal[i].host, port);
-        return -1;
-      }
-      istgt->uctl_portal[i].sock = sock;
-    }
-  }
-  return 0;
-}
-
-static int istgt_close_uctl_portal(ISTGT_Ptr istgt) {
-  int i;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_close_uctl_portal\n");
-  for (i = 0; i < istgt->nuctl_portal; i++) {
-    if (istgt->uctl_portal[i].sock >= 0) {
-      ISTGT_TRACELOG(ISTGT_TRACE_NET,
-                     "close host %s, port %s, tag %d\n",
-                     istgt->uctl_portal[i].host,
-                     istgt->uctl_portal[i].port,
-                     istgt->uctl_portal[i].tag);
-      close(istgt->uctl_portal[i].sock);
-      istgt->uctl_portal[i].sock = -1;
-    }
-  }
-  return 0;
-}
-
-static int istgt_write_pidfile(ISTGT_Ptr istgt) {
-  FILE* fp;
-  pid_t pid;
-  int rc;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_write_pidfile\n");
-  rc = remove(istgt->pidfile);
-  if (rc != 0) {
-    if (errno != ENOENT) {
-      ISTGT_ERRLOG("pidfile remove error %d\n", errno);
-      return -1;
-    }
-  }
-  fp = fopen(istgt->pidfile, "w");
-  if (fp == NULL) {
-    ISTGT_ERRLOG("pidfile open error %d\n", errno);
-    return -1;
-  }
-  pid = getpid();
-  fprintf(fp, "%d\n", (int) pid);
-  fclose(fp);
-  return 0;
-}
-
-static void istgt_remove_pidfile(ISTGT_Ptr istgt) {
-  int rc;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_remove_pidfile\n");
-  rc = remove(istgt->pidfile);
-  if (rc != 0) {
-    ISTGT_ERRLOG("pidfile remove error %d\n", errno);
-    /* ignore error */
-  }
-}
-
 char* istgt_get_nmval(CF_SECTION* sp, const char* key, int idx1, int idx2) {
   CF_ITEM* ip;
   CF_VALUE* vp;
@@ -1085,32 +916,10 @@ int istgt_get_intval(CF_SECTION* sp, const char* key) {
   return istgt_get_nintval(sp, key, 0);
 }
 
-static const char* istgt_get_log_facility(CONFIG* config) {
-  CF_SECTION* sp;
-  const char* logfacility;
-
-  sp = istgt_find_cf_section(config, "Global");
-  if (sp == NULL) {
-    return NULL;
-  }
-  logfacility = istgt_get_val(sp, "LogFacility");
-  if (logfacility == NULL) {
-    logfacility = DEFAULT_LOG_FACILITY;
-  }
-#if 0
-	if (g_trace_flag & ISTGT_TRACE_DEBUG) {
-		fprintf(stderr, "LogFacility %s\n", logfacility);
-	}
-#endif
-
-  return logfacility;
-}
-
 static int istgt_init(ISTGT_Ptr istgt) {
   CF_SECTION* sp;
   const char* ag_tag;
   const char* val;
-  size_t stacksize;
   int ag_tag_i;
   int MaxSessions;
   int MaxConnections;
@@ -1142,48 +951,6 @@ static int istgt_init(ISTGT_Ptr istgt) {
   if (val != NULL) {
     ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "Comment %s\n", val);
   }
-
-  val = istgt_get_val(sp, "PidFile");
-  if (val == NULL) {
-    val = DEFAULT_PIDFILE;
-  }
-  istgt->pidfile = xstrdup(val);
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "PidFile %s\n", istgt->pidfile);
-
-  val = istgt_get_val(sp, "AuthFile");
-  if (val == NULL) {
-    val = DEFAULT_AUTHFILE;
-  }
-  istgt->authfile = xstrdup(val);
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "AuthFile %s\n", istgt->authfile);
-
-#if 0
-	val = istgt_get_val(sp, "MediaFile");
-	if (val == NULL) {
-		val = DEFAULT_MEDIAFILE;
-	}
-	istgt->mediafile = xstrdup(val);
-	ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "MediaFile %s\n",
-	    istgt->mediafile);
-#endif
-
-#if 0
-	val = istgt_get_val(sp, "LiveFile");
-	if (val == NULL) {
-		val = DEFAULT_LIVEFILE;
-	}
-	istgt->livefile = xstrdup(val);
-	ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "LiveFile %s\n",
-	    istgt->livefile);
-#endif
-
-  val = istgt_get_val(sp, "MediaDirectory");
-  if (val == NULL) {
-    val = DEFAULT_MEDIADIRECTORY;
-  }
-  istgt->mediadirectory = xstrdup(val);
-  ISTGT_TRACELOG(
-      ISTGT_TRACE_DEBUG, "MediaDirectory %s\n", istgt->mediadirectory);
 
   val = istgt_get_val(sp, "NodeBase");
   if (val == NULL) {
@@ -1519,16 +1286,6 @@ static int istgt_init(ISTGT_Ptr istgt) {
     return -1;
   }
 
-  rc = istgt_uctl_init(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("istgt_uctl_init() failed\n");
-    return -1;
-  }
-  rc = istgt_build_uctl_portal(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("istgt_build_uctl_portal() failed\n");
-    return -1;
-  }
   rc = istgt_build_portal_group_array(istgt);
   if (rc < 0) {
     ISTGT_ERRLOG("istgt_build_portal_array() failed\n");
@@ -1540,48 +1297,12 @@ static int istgt_init(ISTGT_Ptr istgt) {
     return -1;
   }
 
-  rc = pthread_attr_init(&istgt->attr);
-  if (rc != 0) {
-    ISTGT_ERRLOG("pthread_attr_init() failed\n");
-    return -1;
-  }
-  rc = pthread_attr_getstacksize(&istgt->attr, &stacksize);
-  if (rc != 0) {
-    ISTGT_ERRLOG("pthread_attr_getstacksize() failed\n");
-    return -1;
-  }
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "current thread stack = %zd\n", stacksize);
-  if (stacksize < ISTGT_STACKSIZE) {
-    stacksize = ISTGT_STACKSIZE;
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "new thread stack = %zd\n", stacksize);
-    rc = pthread_attr_setstacksize(&istgt->attr, stacksize);
-    if (rc != 0) {
-      ISTGT_ERRLOG("pthread_attr_setstacksize() failed\n");
-      return -1;
-    }
-  }
-
-  rc = pthread_mutexattr_init(&istgt->mutex_attr);
-  if (rc != 0) {
-    ISTGT_ERRLOG("mutexattr_init() failed\n");
-    return -1;
-  }
-#ifdef HAVE_PTHREAD_MUTEX_ADAPTIVE_NP
-  rc =
-      pthread_mutexattr_settype(&istgt->mutex_attr, PTHREAD_MUTEX_ADAPTIVE_NP);
-#else
-  rc = pthread_mutexattr_settype(&istgt->mutex_attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-  if (rc != 0) {
-    ISTGT_ERRLOG("mutexattr_settype() failed\n");
-    return -1;
-  }
-  rc = pthread_mutex_init(&istgt->state_mutex, &istgt->mutex_attr);
+  rc = pthread_mutex_init(&istgt->state_mutex, NULL);
   if (rc != 0) {
     ISTGT_ERRLOG("mutex_init() failed\n");
     return -1;
   }
-  rc = pthread_mutex_init(&istgt->reload_mutex, &istgt->mutex_attr);
+  rc = pthread_mutex_init(&istgt->reload_mutex, NULL);
   if (rc != 0) {
     ISTGT_ERRLOG("mutex_init() failed\n");
     return -1;
@@ -1592,11 +1313,9 @@ static int istgt_init(ISTGT_Ptr istgt) {
     return -1;
   }
 
-  rc = pipe(istgt->sig_pipe);
+  rc = istgt_control_pipe_create(&istgt->sig_pipe);
   if (rc != 0) {
-    ISTGT_ERRLOG("pipe() failed\n");
-    istgt->sig_pipe[0] = -1;
-    istgt->sig_pipe[1] = -1;
+    ISTGT_ERRLOG("istgt_control_pipe_create() failed\n");
     return -1;
   }
 
@@ -1612,28 +1331,14 @@ static void istgt_shutdown(ISTGT_Ptr istgt) {
 
   istgt_destory_initiator_group_array(istgt);
   istgt_destroy_portal_group_array(istgt);
-  istgt_destroy_uctl_portal(istgt);
-  istgt_uctl_shutdown(istgt);
-  istgt_remove_pidfile(istgt);
-  xfree(istgt->pidfile);
-  xfree(istgt->authfile);
-#if 0
-	xfree(istgt->mediafile);
-	xfree(istgt->livefile);
-#endif
-  xfree(istgt->mediadirectory);
-  xfree(istgt->nodebase);
+  istgt_control_pipe_destroy(&istgt->sig_pipe);
 
-  if (istgt->sig_pipe[0] != -1)
-    close(istgt->sig_pipe[0]);
-  if (istgt->sig_pipe[1] != -1)
-    close(istgt->sig_pipe[1]);
+  xfree(istgt->nodebase);
 
   (void) pthread_cond_destroy(&istgt->reload_cond);
   (void) pthread_mutex_destroy(&istgt->reload_mutex);
   (void) pthread_mutex_destroy(&istgt->state_mutex);
   (void) pthread_mutex_destroy(&istgt->mutex);
-  (void) pthread_attr_destroy(&istgt->attr);
 }
 
 static int istgt_pg_exist_num(CONFIG* config, int num) {
@@ -1707,7 +1412,7 @@ static int istgt_pg_reload_delete(ISTGT_Ptr istgt) {
   /* request delete */
   tmp[0] = 'D';
   DSET32(&tmp[1], 0);
-  rc = write(istgt->sig_pipe[1], tmp, RELOAD_CMD_LENGTH);
+  rc = istgt_control_pipe_write(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
   if (rc < 0 || rc != RELOAD_CMD_LENGTH) {
     ISTGT_ERRLOG("write() failed\n");
     return -1;
@@ -1738,7 +1443,7 @@ static int istgt_pg_reload_update(ISTGT_Ptr istgt) {
   /* request update */
   tmp[0] = 'U';
   DSET32(&tmp[1], 0);
-  rc = write(istgt->sig_pipe[1], tmp, RELOAD_CMD_LENGTH);
+  rc = istgt_control_pipe_write(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
   if (rc < 0 || rc != RELOAD_CMD_LENGTH) {
     ISTGT_ERRLOG("write() failed\n");
     return -1;
@@ -1879,15 +1584,14 @@ static int istgt_ig_reload_update(ISTGT_Ptr istgt) {
 
 static int istgt_reload(ISTGT_Ptr istgt) {
   CONFIG *config_new, *config_old;
-  char* config_file;
   int rc;
 
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_reload\n");
   /* prepare config structure */
   config_new = istgt_allocate_config();
   config_old = istgt->config;
-  config_file = config_old->file;
-  rc = istgt_read_config(config_new, config_file);
+  rc = istgt_read_config(
+      config_new, sizeof CONFIG_FILE / sizeof CONFIG_FILE[0], CONFIG_FILE);
   if (rc < 0) {
     ISTGT_ERRLOG("config error\n");
     return -1;
@@ -1947,13 +1651,14 @@ static int istgt_stop_loop(ISTGT_Ptr istgt) {
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_stop_loop\n");
   tmp[0] = 'E';
   DSET32(&tmp[1], 0);
-  rc = write(istgt->sig_pipe[1], tmp, RELOAD_CMD_LENGTH);
+  rc = istgt_control_pipe_write(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
   if (rc < 0 || rc != RELOAD_CMD_LENGTH) {
     ISTGT_ERRLOG("write() failed\n");
     /* ignore error */
   }
   return 0;
 }
+
 
 static void istgt_sigint(int signo __attribute__((__unused__))) {}
 
@@ -1972,82 +1677,6 @@ static void istgt_sigwakeup(int signo __attribute__((__unused__))) {}
 #ifdef SIGIO
 static void istgt_sigio(int signo __attribute__((__unused__))) {}
 #endif
-
-static void* istgt_sighandler(void* arg) {
-  ISTGT_Ptr istgt = (ISTGT_Ptr) arg;
-  sigset_t signew;
-  int signo;
-
-  sigemptyset(&signew);
-  sigaddset(&signew, SIGINT);
-  sigaddset(&signew, SIGTERM);
-  sigaddset(&signew, SIGQUIT);
-  sigaddset(&signew, SIGHUP);
-#ifdef SIGINFO
-  sigaddset(&signew, SIGINFO);
-#endif
-  sigaddset(&signew, SIGUSR1);
-  sigaddset(&signew, SIGUSR2);
-#ifdef SIGIO
-  sigaddset(&signew, SIGIO);
-#endif
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "loop start\n");
-  while (1) {
-    if (istgt_get_state(istgt) == ISTGT_STATE_EXITING ||
-        istgt_get_state(istgt) == ISTGT_STATE_SHUTDOWN) {
-      break;
-    }
-    sigwait(&signew, &signo);
-    switch (signo) {
-      case SIGINT:
-        printf("SIGINT catch\n");
-        istgt_stop_loop(istgt);
-        istgt_set_state(istgt, ISTGT_STATE_EXITING);
-        istgt_lu_set_all_state(istgt, ISTGT_STATE_EXITING);
-        break;
-      case SIGTERM:
-        printf("SIGTERM catch\n");
-        istgt_stop_loop(istgt);
-        istgt_set_state(istgt, ISTGT_STATE_EXITING);
-        istgt_lu_set_all_state(istgt, ISTGT_STATE_EXITING);
-        break;
-      case SIGQUIT:
-        printf("SIGQUIT catch\n");
-        exit(EXIT_SUCCESS);
-        break;
-      case SIGHUP:
-        printf("SIGHUP catch\n");
-        istgt_reload(istgt);
-        break;
-#ifdef SIGINFO
-      case SIGINFO:
-        printf("SIGINFO catch\n");
-        istgt_set_trace_flag(ISTGT_TRACE_ISCSI);
-        break;
-#endif
-      case SIGUSR1:
-        printf("SIGUSR1 catch\n");
-        istgt_set_trace_flag(ISTGT_TRACE_NONE);
-        break;
-      case SIGUSR2:
-        printf("SIGUSR2 catch\n");
-        // istgt_set_trace_flag(ISTGT_TRACE_SCSI);
-        istgt_set_trace_flag(ISTGT_TRACE_ALL);
-        break;
-#ifdef SIGIO
-      case SIGIO:
-        // printf("SIGIO catch\n");
-        break;
-#endif
-      default:
-        break;
-    }
-  }
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "loop ended\n");
-
-  return NULL;
-}
 
 static PORTAL* istgt_get_sock_portal(ISTGT_Ptr istgt, int sock) {
   int i, j;
@@ -2178,15 +1807,15 @@ static int istgt_acceptor(ISTGT_Ptr istgt) {
   int kq;
   struct kevent kev;
   struct timespec kev_timeout;
-  int kqsocks[MAX_PORTAL_GROUP + MAX_UCPORTAL];
+  int kqsocks[MAX_PORTAL_GROUP + 1];
 #else
-  struct pollfd fds[MAX_PORTAL_GROUP + MAX_UCPORTAL];
+  struct pollfd fds[MAX_PORTAL_GROUP + 1];
 #endif /* ISTGT_USE_KQUEUE */
   struct sockaddr_storage sa;
   socklen_t salen;
   int sock;
   int rc, n;
-  int ucidx;
+  int spidx;
   int nidx;
   int i, j;
 
@@ -2245,15 +1874,15 @@ reload:
     kqsocks[nidx] = istgt->uctl_portal[i].sock;
     nidx++;
   }
-  ISTGT_EV_SET(&kev, istgt->sig_pipe[0], EVFILT_READ, EV_ADD, 0, 0, NULL);
+  ISTGT_EV_SET(&kev, istgt->sig_pipe.fd[0], EVFILT_READ, EV_ADD, 0, 0, NULL);
   rc = kevent(kq, &kev, 1, NULL, 0, NULL);
   if (rc == -1) {
     ISTGT_ERRLOG("kevent() failed\n");
     close(kq);
     return -1;
   }
-  kqsocks[nidx] = istgt->sig_pipe[0];
-  nidx++;
+  spidx = nidx++;
+  kqsocks[spidx] = istgt->sig_pipe.fd[0];
 
   if (!istgt->daemon) {
     ISTGT_EV_SET(&kev, SIGINT, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
@@ -2277,22 +1906,16 @@ reload:
   for (i = 0; i < istgt->nportal_group; i++) {
     for (j = 0; j < istgt->portal_group[i].nportals; j++) {
       if (istgt->portal_group[i].portals[j]->sock >= 0) {
-        fds[i].fd = istgt->portal_group[i].portals[j]->sock;
-        fds[i].events = POLLIN;
+        fds[nidx].fd = istgt->portal_group[i].portals[j]->sock;
+        fds[nidx].events = POLLIN;
         nidx++;
       }
     }
   }
   MTX_UNLOCK(&istgt->mutex);
-  ucidx = nidx;
-  for (i = 0; i < istgt->nuctl_portal; i++) {
-    fds[ucidx + i].fd = istgt->uctl_portal[i].sock;
-    fds[ucidx + i].events = POLLIN;
-    nidx++;
-  }
-  fds[nidx].fd = istgt->sig_pipe[0];
-  fds[nidx].events = POLLIN;
-  nidx++;
+  spidx = nidx++;
+  fds[spidx].fd = istgt->sig_pipe.fd[0];
+  fds[spidx].events = POLLIN;
 #endif /* ISTGT_USE_KQUEUE */
 
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "loop start\n");
@@ -2343,7 +1966,7 @@ reload:
 #endif /* ISTGT_USE_KQUEUE */
 
     n = rc;
-    for (i = 0; n != 0 && i < ucidx; i++) {
+    for (i = 0; n != 0 && i < spidx; i++) {
 #ifdef ISTGT_USE_KQUEUE
       if (kev.ident == (uintptr_t) kqsocks[i]) {
         if (kev.flags) {
@@ -2397,67 +2020,24 @@ reload:
       }
     }
 
-    /* check for control */
-    for (i = 0; n != 0 && i < istgt->nuctl_portal; i++) {
-#ifdef ISTGT_USE_KQUEUE
-      if (kev.ident == (uintptr_t) istgt->uctl_portal[i].sock) {
-        if (kev.flags) {
-          ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "flags %x\n", kev.flags);
-        }
-#else
-      if (fds[ucidx + i].revents) {
-        ISTGT_TRACELOG(
-            ISTGT_TRACE_DEBUG, "events %x\n", fds[ucidx + i].revents);
-      }
-      if (fds[ucidx + i].revents & POLLIN) {
-#endif /* ISTGT_USE_KQUEUE */
-        n--;
-        memset(&sa, 0, sizeof(sa));
-        salen = sizeof(sa);
-#ifdef ISTGT_USE_KQUEUE
-        ISTGT_TRACELOG(
-            ISTGT_TRACE_NET, "accept %ld\n", (unsigned long) kev.ident);
-        rc = accept(kev.ident, (struct sockaddr*) &sa, &salen);
-#else
-        ISTGT_TRACELOG(ISTGT_TRACE_NET, "accept %d\n", fds[ucidx + i].fd);
-        rc = accept(fds[ucidx + i].fd, (struct sockaddr*) &sa, &salen);
-#endif /* ISTGT_USE_KQUEUE */
-        if (rc < 0) {
-          ISTGT_ERRLOG("accept error: %d\n", rc);
-          continue;
-        }
-        sock = rc;
-        rc = istgt_create_uctl(istgt,
-                               &istgt->uctl_portal[i],
-                               sock,
-                               (struct sockaddr*) &sa,
-                               salen);
-        if (rc < 0) {
-          close(sock);
-          ISTGT_ERRLOG("istgt_create_uctl() failed\n");
-          continue;
-        }
-      }
-    }
-
 /* check for signal thread */
 #ifdef ISTGT_USE_KQUEUE
-    if (kev.ident == (uintptr_t) istgt->sig_pipe[0]) {
+    if (kev.ident == (uintptr_t) istgt->sig_pipe.fd[0]) {
       if (kev.flags & (EV_EOF | EV_ERROR)) {
         ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "kevent EOF/ERROR\n");
         break;
       }
 #else
-    if (fds[nidx - 1].revents & POLLHUP) {
+    if (fds[spidx].revents & POLLHUP) {
       break;
     }
-    if (fds[nidx - 1].revents & POLLIN) {
+    if (fds[spidx].revents & POLLIN) {
 #endif /* ISTGT_USE_KQUEUE */
       char tmp[RELOAD_CMD_LENGTH];
       // int pgp_idx;
       int rc2;
 
-      rc = read(istgt->sig_pipe[0], tmp, RELOAD_CMD_LENGTH);
+      rc = istgt_control_pipe_read(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
       if (rc < 0 || rc == 0 || rc != RELOAD_CMD_LENGTH) {
         ISTGT_ERRLOG("read() failed\n");
         break;
@@ -2516,38 +2096,23 @@ reload:
 static void usage(void) {
   printf("istgt [options]\n");
   printf("options:\n");
-  printf(" -c config  config file (default %s)\n", DEFAULT_CONFIG);
-  printf(" -p pidfile use specific file\n");
-  printf(" -l facility use specific syslog facility (default %s)\n",
-         DEFAULT_LOG_FACILITY);
-  printf(
-      " -m mode    operational mode (default %d, 0=traditional, "
-      "1=normal, 2=experimental)\n",
-      DEFAULT_ISTGT_SWMODE);
   printf(" -t flag    trace flag (all, net, iscsi, scsi, lu)\n");
   printf(" -q         quiet warnings\n");
-  printf(" -D         don't detach from tty\n");
   printf(" -H         show this usage\n");
   printf(" -V         show version\n");
 }
 
 int main(int argc, char** argv) {
   ISTGT_Ptr istgt;
-  const char* config_file = DEFAULT_CONFIG;
-  const char* pidfile = NULL;
-  const char* logfacility = NULL;
-  const char* logpriority = NULL;
   CONFIG* config;
-  pthread_t sigthread;
-  struct sigaction sigact, sigoldact_pipe, sigoldact_int, sigoldact_term;
-  struct sigaction sigoldact_hup, sigoldact_info;
-  struct sigaction sigoldact_wakeup, sigoldact_io;
-  sigset_t signew, sigold;
   int retry = 10;
-  int detach = 1;
+#if 0
   int swmode;
-  int ch;
+	int ch;
+#endif
   int rc;
+
+  istgt_platform_init();
 
   if (sizeof(ISCSI_BHS) != ISCSI_BHS_LEN) {
     fprintf(stderr, "Internal Error\n");
@@ -2557,73 +2122,54 @@ int main(int argc, char** argv) {
   memset(&g_istgt, 0, sizeof g_istgt);
   istgt = &g_istgt;
   istgt->state = ISTGT_STATE_INVALID;
-  istgt->swmode = DEFAULT_ISTGT_SWMODE;
-  istgt->sig_pipe[0] = istgt->sig_pipe[1] = -1;
+  istgt->sig_pipe = istgt_control_pipe_init();
   istgt->daemon = 0;
   istgt->generation = 0;
 
-  while ((ch = getopt(argc, argv, "c:p:l:m:t:qDHV")) != -1) {
-    switch (ch) {
-      case 'c':
-        config_file = optarg;
-        break;
-      case 'p':
-        pidfile = optarg;
-        break;
-      case 'l':
-        logfacility = optarg;
-        break;
-      case 'm':
-        swmode = strtol(optarg, NULL, 10);
-        if (swmode == ISTGT_SWMODE_TRADITIONAL ||
-            swmode == ISTGT_SWMODE_NORMAL ||
-            swmode == ISTGT_SWMODE_EXPERIMENTAL) {
-          istgt->swmode = swmode;
-        } else {
-          fprintf(stderr, "unknown mode %x\n", swmode);
-          usage();
-          exit(EXIT_FAILURE);
-        }
-        break;
-      case 't':
-        if (strcasecmp(optarg, "NET") == 0) {
-          istgt_set_trace_flag(ISTGT_TRACE_NET);
-        } else if (strcasecmp(optarg, "ISCSI") == 0) {
-          istgt_set_trace_flag(ISTGT_TRACE_ISCSI);
-        } else if (strcasecmp(optarg, "SCSI") == 0) {
-          istgt_set_trace_flag(ISTGT_TRACE_SCSI);
-        } else if (strcasecmp(optarg, "LU") == 0) {
-          istgt_set_trace_flag(ISTGT_TRACE_LU);
-        } else if (strcasecmp(optarg, "ALL") == 0) {
-          istgt_set_trace_flag(ISTGT_TRACE_ALL);
-        } else if (strcasecmp(optarg, "NONE") == 0) {
-          istgt_set_trace_flag(ISTGT_TRACE_NONE);
-        } else {
-          fprintf(stderr, "unknown flag\n");
-          usage();
-          exit(EXIT_FAILURE);
-        }
-        break;
-      case 'q':
-        g_warn_flag = 0;
-        break;
-      case 'D':
-        detach = 0;
-        break;
-      case 'V':
-        printf("istgt version %s\n", ISTGT_VERSION);
-        printf("istgt extra version %s\n", ISTGT_EXTRA_VERSION);
-        exit(EXIT_SUCCESS);
-      case 'H':
-      default:
-        usage();
-        exit(EXIT_SUCCESS);
-    }
-  }
+#if 0
+ 	while ((ch = getopt(argc, argv, "l:t:qDHV")) != -1) {
+		switch (ch) {
+		case 'l':
+			logfacility = optarg;
+			break;
+		case 't':
+			if (strcasecmp(optarg, "NET") == 0) {
+				istgt_set_trace_flag(ISTGT_TRACE_NET);
+			} else if (strcasecmp(optarg, "ISCSI") == 0) {
+				istgt_set_trace_flag(ISTGT_TRACE_ISCSI);
+			} else if (strcasecmp(optarg, "SCSI") == 0) {
+				istgt_set_trace_flag(ISTGT_TRACE_SCSI);
+			} else if (strcasecmp(optarg, "LU") == 0) {
+				istgt_set_trace_flag(ISTGT_TRACE_LU);
+			} else if (strcasecmp(optarg, "ALL") == 0) {
+				istgt_set_trace_flag(ISTGT_TRACE_ALL);
+			} else if (strcasecmp(optarg, "NONE") == 0) {
+				istgt_set_trace_flag(ISTGT_TRACE_NONE);
+			} else {
+				fprintf(stderr, "unknown flag\n");
+				usage();
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case 'q':
+			g_warn_flag = 0;
+			break;
+		case 'V':
+			printf("istgt version %s\n", ISTGT_VERSION);
+			printf("istgt extra version %s\n", ISTGT_EXTRA_VERSION);
+			exit(EXIT_SUCCESS);
+		case 'H':
+		default:
+			usage();
+			exit(EXIT_SUCCESS);
+		}
+	}
+#endif
 
   /* read config files */
   config = istgt_allocate_config();
-  rc = istgt_read_config(config, config_file);
+  rc = istgt_read_config(
+      config, sizeof CONFIG_FILE / sizeof CONFIG_FILE[0], CONFIG_FILE);
   if (rc < 0) {
     fprintf(stderr, "config error\n");
     exit(EXIT_FAILURE);
@@ -2638,41 +2184,9 @@ int main(int argc, char** argv) {
   // istgt_print_config(config);
 
   /* open log files */
-  if (logfacility == NULL) {
-    logfacility = istgt_get_log_facility(config);
-  }
-  rc = istgt_set_log_facility(logfacility);
-  if (rc < 0) {
-    fprintf(stderr, "log facility error\n");
-    istgt_free_config(config);
-    exit(EXIT_FAILURE);
-  }
-  if (logpriority == NULL) {
-    logpriority = DEFAULT_LOG_PRIORITY;
-  }
-  rc = istgt_set_log_priority(logpriority);
-  if (rc < 0) {
-    fprintf(stderr, "log priority error\n");
-    istgt_free_config(config);
-    exit(EXIT_FAILURE);
-  }
-  istgt_open_log();
 
   ISTGT_NOTICELOG(
       "istgt version %s (%s)\n", ISTGT_VERSION, ISTGT_EXTRA_VERSION);
-  switch (istgt->swmode) {
-    case ISTGT_SWMODE_TRADITIONAL:
-      ISTGT_NOTICELOG("traditional mode\n");
-      break;
-    case ISTGT_SWMODE_NORMAL:
-      ISTGT_NOTICELOG("normal mode\n");
-      break;
-    case ISTGT_SWMODE_EXPERIMENTAL:
-      ISTGT_NOTICELOG("experimental mode\n");
-      break;
-    default:
-      break;
-  }
 #ifdef ISTGT_USE_KQUEUE
   ISTGT_NOTICELOG("using kqueue\n");
 #else
@@ -2696,7 +2210,6 @@ int main(int argc, char** argv) {
   if (rc < 0) {
     ISTGT_ERRLOG("istgt_init() failed\n");
   initialize_error:
-    istgt_close_log();
     istgt_free_config(config);
     exit(EXIT_FAILURE);
   }
@@ -2711,129 +2224,6 @@ int main(int argc, char** argv) {
     goto initialize_error;
   }
 
-  /* override by command line */
-  if (pidfile != NULL) {
-    xfree(istgt->pidfile);
-    istgt->pidfile = xstrdup(pidfile);
-  }
-
-  /* detach from tty and run background */
-  fflush(stdout);
-  if (detach) {
-    istgt->daemon = 1;
-    rc = daemon(0, 0);
-    if (rc < 0) {
-      ISTGT_ERRLOG("daemon() failed\n");
-      goto initialize_error;
-    }
-  }
-
-  /* setup signal handler thread */
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "setup signal handler\n");
-  memset(&sigact, 0, sizeof sigact);
-  memset(&sigoldact_pipe, 0, sizeof sigoldact_pipe);
-  memset(&sigoldact_int, 0, sizeof sigoldact_int);
-  memset(&sigoldact_term, 0, sizeof sigoldact_term);
-  memset(&sigoldact_hup, 0, sizeof sigoldact_hup);
-  memset(&sigoldact_info, 0, sizeof sigoldact_info);
-  memset(&sigoldact_wakeup, 0, sizeof sigoldact_wakeup);
-  memset(&sigoldact_io, 0, sizeof sigoldact_io);
-  sigact.sa_handler = SIG_IGN;
-  sigemptyset(&sigact.sa_mask);
-  rc = sigaction(SIGPIPE, &sigact, &sigoldact_pipe);
-  if (rc < 0) {
-    ISTGT_ERRLOG("sigaction(SIGPIPE) failed\n");
-    goto initialize_error;
-  }
-  sigact.sa_handler = istgt_sigint;
-  sigemptyset(&sigact.sa_mask);
-  rc = sigaction(SIGINT, &sigact, &sigoldact_int);
-  if (rc < 0) {
-    ISTGT_ERRLOG("sigaction(SIGINT) failed\n");
-    goto initialize_error;
-  }
-  sigact.sa_handler = istgt_sigterm;
-  sigemptyset(&sigact.sa_mask);
-  rc = sigaction(SIGTERM, &sigact, &sigoldact_term);
-  if (rc < 0) {
-    ISTGT_ERRLOG("sigaction(SIGTERM) failed\n");
-    goto initialize_error;
-  }
-  sigact.sa_handler = istgt_sighup;
-  sigemptyset(&sigact.sa_mask);
-  rc = sigaction(SIGHUP, &sigact, &sigoldact_hup);
-  if (rc < 0) {
-    ISTGT_ERRLOG("sigaction(SIGHUP) failed\n");
-    goto initialize_error;
-  }
-#ifdef SIGINFO
-  sigact.sa_handler = istgt_siginfo;
-  sigemptyset(&sigact.sa_mask);
-  rc = sigaction(SIGINFO, &sigact, &sigoldact_info);
-  if (rc < 0) {
-    ISTGT_ERRLOG("sigaction(SIGINFO) failed\n");
-    goto initialize_error;
-  }
-#endif
-#ifdef ISTGT_USE_SIGRT
-  if (ISTGT_SIGWAKEUP < SIGRTMIN || ISTGT_SIGWAKEUP > SIGRTMAX) {
-    ISTGT_ERRLOG("SIGRT error\n");
-    goto initialize_error;
-  }
-#endif /* ISTGT_USE_SIGRT */
-  sigact.sa_handler = istgt_sigwakeup;
-  sigemptyset(&sigact.sa_mask);
-  rc = sigaction(ISTGT_SIGWAKEUP, &sigact, &sigoldact_wakeup);
-  if (rc < 0) {
-    ISTGT_ERRLOG("sigaction(ISTGT_SIGWAKEUP) failed\n");
-    goto initialize_error;
-  }
-#ifdef SIGIO
-  sigact.sa_handler = istgt_sigio;
-  sigemptyset(&sigact.sa_mask);
-  rc = sigaction(SIGIO, &sigact, &sigoldact_io);
-  if (rc < 0) {
-    ISTGT_ERRLOG("sigaction(SIGIO) failed\n");
-    goto initialize_error;
-  }
-#endif
-  pthread_sigmask(SIG_SETMASK, NULL, &signew);
-  sigaddset(&signew, SIGINT);
-  sigaddset(&signew, SIGTERM);
-  sigaddset(&signew, SIGQUIT);
-  sigaddset(&signew, SIGHUP);
-#ifdef SIGINFO
-  sigaddset(&signew, SIGINFO);
-#endif
-  sigaddset(&signew, SIGUSR1);
-  sigaddset(&signew, SIGUSR2);
-#ifdef SIGIO
-  sigaddset(&signew, SIGIO);
-#endif
-  sigaddset(&signew, ISTGT_SIGWAKEUP);
-  pthread_sigmask(SIG_SETMASK, &signew, &sigold);
-#ifdef ISTGT_STACKSIZE
-  rc = pthread_create(
-      &sigthread, &istgt->attr, &istgt_sighandler, (void*) istgt);
-#else
-  rc = pthread_create(&sigthread, NULL, &istgt_sighandler, (void*) istgt);
-#endif
-  if (rc != 0) {
-    ISTGT_ERRLOG("pthread_create() failed\n");
-    goto initialize_error;
-  }
-#if 0
-	rc = pthread_detach(sigthread);
-	if (rc != 0) {
-		ISTGT_ERRLOG("pthread_detach() failed\n");
-		goto initialize_error;
-	}
-#endif
-#ifdef HAVE_PTHREAD_SET_NAME_NP
-  pthread_set_name_np(sigthread, "sigthread");
-  pthread_set_name_np(pthread_self(), "mainthread");
-#endif
-
   /* create LUN threads for command queuing */
   rc = istgt_lu_create_threads(istgt);
   if (rc < 0) {
@@ -2847,21 +2237,9 @@ int main(int argc, char** argv) {
   }
 
   /* open portals */
-  rc = istgt_open_uctl_portal(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("istgt_open_uctl_portal() failed\n");
-    goto initialize_error;
-  }
   rc = istgt_open_all_portals(istgt);
   if (rc < 0) {
     ISTGT_ERRLOG("istgt_open_all_portals() failed\n");
-    goto initialize_error;
-  }
-
-  /* write pid */
-  rc = istgt_write_pidfile(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("istgt_write_pid() failed\n");
     goto initialize_error;
   }
 
@@ -2870,11 +2248,9 @@ int main(int argc, char** argv) {
   if (rc < 0) {
     ISTGT_ERRLOG("istgt_acceptor() failed\n");
     istgt_close_all_portals(istgt);
-    istgt_close_uctl_portal(istgt);
     istgt_iscsi_shutdown(istgt);
     istgt_lu_shutdown(istgt);
     istgt_shutdown(istgt);
-    istgt_close_log();
     config = istgt->config;
     istgt->config = NULL;
     istgt_free_config(config);
@@ -2895,20 +2271,11 @@ int main(int argc, char** argv) {
   ISTGT_NOTICELOG(
       "istgt version %s (%s) exiting\n", ISTGT_VERSION, ISTGT_EXTRA_VERSION);
 
-  /* stop signal thread */
-  rc = pthread_join(sigthread, NULL);
-  if (rc != 0) {
-    ISTGT_ERRLOG("pthread_join() failed\n");
-    exit(EXIT_FAILURE);
-  }
-
   /* cleanup */
   istgt_close_all_portals(istgt);
-  istgt_close_uctl_portal(istgt);
   istgt_iscsi_shutdown(istgt);
   istgt_lu_shutdown(istgt);
   istgt_shutdown(istgt);
-  istgt_close_log();
   config = istgt->config;
   istgt->config = NULL;
   istgt_free_config(config);

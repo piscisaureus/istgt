@@ -35,10 +35,10 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/uio.h>
 
 #include "istgt_crc32c.h"
 #include "istgt_iscsi.h"
+#include "istgt_platform.h"
 
 /* defined in RFC3720(12.1) */
 static uint32_t istgt_crc32c_initial = ISTGT_CRC32C_INITIAL;

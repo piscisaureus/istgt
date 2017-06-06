@@ -33,18 +33,17 @@
 #include <stdint.h>
 
 #include <errno.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <fcntl.h>
-#include <unistd.h>
 
 #include "istgt.h"
 #include "istgt_log.h"
 #include "istgt_lu.h"
 #include "istgt_misc.h"
+#include "istgt_platform.h"
 #include "istgt_proto.h"
 
 #if !defined(__GNUC__)

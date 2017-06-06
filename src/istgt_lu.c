@@ -35,32 +35,16 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
-#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef HAVE_PTHREAD_NP_H
-#include <pthread_np.h>
-#endif
-#include <arpa/inet.h>
-#include <netinet/in.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
 
+
 #include <fcntl.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
-#ifdef HAVE_SYS_DISK_H
-#include <sys/disk.h>
-#endif
-#ifdef HAVE_SYS_DISKLABEL_H
-#include <sys/disklabel.h>
-#endif
-#ifdef __linux__
-#include <linux/fs.h>
-#endif
 
 #include "istgt.h"
 #include "istgt_conf.h"
@@ -69,6 +53,7 @@
 #include "istgt_lu.h"
 #include "istgt_md5.h"
 #include "istgt_misc.h"
+#include "istgt_platform.h"
 #include "istgt_proto.h"
 #include "istgt_scsi.h"
 #include "istgt_sock.h"
@@ -671,11 +656,8 @@ uint64_t istgt_lu_get_devsize(const char* file) {
   int rc;
 
   val = 0ULL;
-#ifdef ALLOW_SYMLINK_DEVICE
+
   rc = stat(file, &st);
-#else
-  rc = lstat(file, &st);
-#endif /* ALLOW_SYMLINK_DEVICE */
   if (rc != 0)
     return val;
   if (!S_ISCHR(st.st_mode) && !S_ISBLK(st.st_mode))
@@ -756,18 +738,10 @@ uint64_t istgt_lu_get_filesize(const char* file) {
   int rc;
 
   val = 0ULL;
-#ifdef ALLOW_SYMLINK_DEVICE
-  rc = stat(file, &st);
-#else
-  rc = lstat(file, &st);
-#endif /* ALLOW_SYMLINK_DEVICE */
 
+  rc = stat(file, &st);
   if (rc < 0)
     return val;
-#ifndef ALLOW_SYMLINK_DEVICE
-  if (S_ISLNK(st.st_mode))
-    return val;
-#endif /* ALLOW_SYMLINK_DEVICE */
 
   if (S_ISCHR(st.st_mode)) {
     val = istgt_lu_get_devsize(file);
@@ -776,11 +750,7 @@ uint64_t istgt_lu_get_filesize(const char* file) {
   } else if (S_ISREG(st.st_mode)) {
     val = st.st_size;
   } else {
-#ifdef ALLOW_SYMLINK_DEVICE
     ISTGT_ERRLOG("stat is neither REG, CHR nor BLK\n");
-#else
-    ISTGT_ERRLOG("lstat is neither REG, CHR nor BLK\n");
-#endif /* ALLOW_SYMLINK_DEVICE */
     val = 0ULL;
   }
   return val;
@@ -1547,14 +1517,8 @@ static int istgt_lu_add_unit(ISTGT_Ptr istgt, CF_SECTION* sp) {
     ISTGT_ERRLOG("LU%d: unknown unit type\n", lu->num);
     goto error_return;
   }
-  if (strcasecmp(val, "Pass") == 0) {
-    lu->type = ISTGT_LU_TYPE_PASS;
-  } else if (strcasecmp(val, "Disk") == 0) {
+  if (strcasecmp(val, "Disk") == 0) {
     lu->type = ISTGT_LU_TYPE_DISK;
-  } else if (strcasecmp(val, "DVD") == 0) {
-    lu->type = ISTGT_LU_TYPE_DVD;
-  } else if (strcasecmp(val, "Tape") == 0) {
-    lu->type = ISTGT_LU_TYPE_TAPE;
   } else {
     ISTGT_ERRLOG("LU%d: unknown unit type\n", lu->num);
     goto error_return;
@@ -1584,34 +1548,6 @@ static int istgt_lu_add_unit(ISTGT_Ptr istgt, CF_SECTION* sp) {
         revision = DEFAULT_LU_REVISION_DISK;
       if (serial == NULL || strlen(serial) == 0) {
         snprintf(buf, sizeof buf, "%.8d", 10000000 + nbs + lu->num);
-        serial = (const char*) &buf[0];
-      }
-      break;
-    case ISTGT_LU_TYPE_DVD:
-      if (vendor == NULL || strlen(vendor) == 0)
-        vendor = DEFAULT_LU_VENDOR_DVD;
-      if (product == NULL || strlen(product) == 0)
-        product = DEFAULT_LU_PRODUCT_DVD;
-      if (revision == NULL || strlen(revision) == 0)
-        revision = DEFAULT_LU_REVISION_DVD;
-      if (serial == NULL || strlen(serial) == 0) {
-        snprintf(buf, sizeof buf, "%.8d", 10000000 + nbs + lu->num);
-        serial = (const char*) &buf[0];
-      }
-      break;
-    case ISTGT_LU_TYPE_TAPE:
-      if (vendor == NULL || strlen(vendor) == 0)
-        vendor = DEFAULT_LU_VENDOR_TAPE;
-      if (product == NULL || strlen(product) == 0)
-        product = DEFAULT_LU_PRODUCT_TAPE;
-      if (revision == NULL || strlen(revision) == 0)
-        revision = DEFAULT_LU_REVISION_TAPE;
-      if (serial == NULL || strlen(serial) == 0) {
-#ifdef USE_LU_TAPE_DLT8000
-        snprintf(buf, sizeof buf, "CX%.8d", 10000000 + nbs + lu->num);
-#else
-        snprintf(buf, sizeof buf, "%.8d", 10000000 + nbs + lu->num);
-#endif /* USE_LU_TAPE_DLT8000 */
         serial = (const char*) &buf[0];
       }
       break;
@@ -1645,12 +1581,6 @@ static int istgt_lu_add_unit(ISTGT_Ptr istgt, CF_SECTION* sp) {
       case ISTGT_LU_TYPE_DISK:
         lu->blocklen = DEFAULT_LU_BLOCKLEN_DISK;
         break;
-      case ISTGT_LU_TYPE_DVD:
-        lu->blocklen = DEFAULT_LU_BLOCKLEN_DVD;
-        break;
-      case ISTGT_LU_TYPE_TAPE:
-        lu->blocklen = DEFAULT_LU_BLOCKLEN_TAPE;
-        break;
       default:
         lu->blocklen = DEFAULT_LU_BLOCKLEN;
         break;
@@ -1667,8 +1597,6 @@ static int istgt_lu_add_unit(ISTGT_Ptr istgt, CF_SECTION* sp) {
         lu->queue_depth = DEFAULT_LU_QUEUE_DEPTH;
         // lu->queue_depth = 0;
         break;
-      case ISTGT_LU_TYPE_DVD:
-      case ISTGT_LU_TYPE_TAPE:
       default:
         lu->queue_depth = 0;
         break;
@@ -2059,12 +1987,12 @@ static int istgt_lu_init_unit(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
     ISTGT_ERRLOG("LU%d: mutex_init() failed\n", lu->num);
     return -1;
   }
-  rc = pthread_mutex_init(&lu->state_mutex, &istgt->mutex_attr);
+  rc = pthread_mutex_init(&lu->state_mutex, NULL);
   if (rc != 0) {
     ISTGT_ERRLOG("LU%d: mutex_init() failed\n", lu->num);
     return -1;
   }
-  rc = pthread_mutex_init(&lu->queue_mutex, &istgt->mutex_attr);
+  rc = pthread_mutex_init(&lu->queue_mutex, NULL);
   if (rc != 0) {
     ISTGT_ERRLOG("LU%d: mutex_init() failed\n", lu->num);
     return -1;
@@ -2076,34 +2004,10 @@ static int istgt_lu_init_unit(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
   }
 
   switch (lu->type) {
-    case ISTGT_LU_TYPE_PASS:
-      rc = istgt_lu_pass_init(istgt, lu);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_pass_init() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
     case ISTGT_LU_TYPE_DISK:
       rc = istgt_lu_disk_init(istgt, lu);
       if (rc < 0) {
         ISTGT_ERRLOG("LU%d: lu_disk_init() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
-    case ISTGT_LU_TYPE_DVD:
-      rc = istgt_lu_dvd_init(istgt, lu);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_dvd_init() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
-    case ISTGT_LU_TYPE_TAPE:
-      rc = istgt_lu_tape_init(istgt, lu);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_tape_init() failed\n", lu->num);
         return -1;
       }
       break;
@@ -2209,8 +2113,8 @@ retry:
         if (!warn_msg) {
           warn_msg = 1;
           ISTGT_WARNLOG(
-              "It is recommended that you disconnect the target "
-              "before deletion.\n");
+              "It is recommended that you disconnect the target before "
+              "deletion.\n");
         }
         if (warn_num != lu->num) {
           warn_num = lu->num;
@@ -2463,12 +2367,8 @@ static int istgt_lu_create_thread(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
 
   if (lu->queue_depth != 0) {
     ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "thread for LU%d\n", lu->num);
-/* create LU thread */
-#ifdef ISTGT_STACKSIZE
-    rc = pthread_create(&lu->thread, &istgt->attr, &luworker, (void*) lu);
-#else
+    /* create LU thread */
     rc = pthread_create(&lu->thread, NULL, &luworker, (void*) lu);
-#endif
     if (rc != 0) {
       ISTGT_ERRLOG("pthread_create() failed\n");
       return -1;
@@ -2514,34 +2414,10 @@ static int istgt_lu_shutdown_unit(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
   int rc;
 
   switch (lu->type) {
-    case ISTGT_LU_TYPE_PASS:
-      rc = istgt_lu_pass_shutdown(istgt, lu);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_pass_shutdown() failed\n", lu->num);
-        /* ignore error */
-      }
-      break;
-
     case ISTGT_LU_TYPE_DISK:
       rc = istgt_lu_disk_shutdown(istgt, lu);
       if (rc < 0) {
         ISTGT_ERRLOG("LU%d: lu_disk_shutdown() failed\n", lu->num);
-        /* ignore error */
-      }
-      break;
-
-    case ISTGT_LU_TYPE_DVD:
-      rc = istgt_lu_dvd_shutdown(istgt, lu);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_dvd_shutdown() failed\n", lu->num);
-        /* ignore error */
-      }
-      break;
-
-    case ISTGT_LU_TYPE_TAPE:
-      rc = istgt_lu_tape_shutdown(istgt, lu);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_tape_shutdown() failed\n", lu->num);
         /* ignore error */
       }
       break;
@@ -2673,42 +2549,12 @@ int istgt_lu_reset(ISTGT_LU_Ptr lu, uint64_t lun) {
       ISTGT_TRACE_DEBUG, "LU%d: Name=%s, LUN=%d\n", lu->num, lu->name, lun_i);
 
   switch (lu->type) {
-    case ISTGT_LU_TYPE_PASS:
-      MTX_LOCK(&lu->mutex);
-      rc = istgt_lu_pass_reset(lu, lun_i);
-      MTX_UNLOCK(&lu->mutex);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_pass_reset() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
     case ISTGT_LU_TYPE_DISK:
       MTX_LOCK(&lu->mutex);
       rc = istgt_lu_disk_reset(lu, lun_i);
       MTX_UNLOCK(&lu->mutex);
       if (rc < 0) {
         ISTGT_ERRLOG("LU%d: lu_disk_reset() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
-    case ISTGT_LU_TYPE_DVD:
-      MTX_LOCK(&lu->mutex);
-      rc = istgt_lu_dvd_reset(lu, lun_i);
-      MTX_UNLOCK(&lu->mutex);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_dvd_reset() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
-    case ISTGT_LU_TYPE_TAPE:
-      MTX_LOCK(&lu->mutex);
-      rc = istgt_lu_tape_reset(lu, lun_i);
-      MTX_UNLOCK(&lu->mutex);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_tape_reset() failed\n", lu->num);
         return -1;
       }
       break;
@@ -2752,16 +2598,6 @@ int istgt_lu_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd) {
 
   rc = 0;
   switch (lu->type) {
-    case ISTGT_LU_TYPE_PASS:
-      MTX_LOCK(&lu->mutex);
-      rc = istgt_lu_pass_execute(conn, lu_cmd);
-      MTX_UNLOCK(&lu->mutex);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_pass_execute() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
     case ISTGT_LU_TYPE_DISK:
       if (lu->queue_depth != 0) {
         rc = istgt_lu_disk_queue(conn, lu_cmd);
@@ -2777,26 +2613,6 @@ int istgt_lu_execute(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd) {
           ISTGT_ERRLOG("LU%d: lu_disk_execute() failed\n", lu->num);
           return -1;
         }
-      }
-      break;
-
-    case ISTGT_LU_TYPE_DVD:
-      MTX_LOCK(&lu->mutex);
-      rc = istgt_lu_dvd_execute(conn, lu_cmd);
-      MTX_UNLOCK(&lu->mutex);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_dvd_execute() failed\n", lu->num);
-        return -1;
-      }
-      break;
-
-    case ISTGT_LU_TYPE_TAPE:
-      MTX_LOCK(&lu->mutex);
-      rc = istgt_lu_tape_execute(conn, lu_cmd);
-      MTX_UNLOCK(&lu->mutex);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: lu_tape_execute() failed\n", lu->num);
-        return -1;
       }
       break;
 
@@ -3011,9 +2827,6 @@ int istgt_lu_clear_task_IT(CONN_Ptr conn, ISTGT_LU_Ptr lu) {
       }
       break;
 
-    case ISTGT_LU_TYPE_DVD:
-    case ISTGT_LU_TYPE_TAPE:
-    case ISTGT_LU_TYPE_NONE:
     default:
       ISTGT_ERRLOG("LU%d: unsupported type\n", lu->num);
       return -1;
@@ -3046,8 +2859,6 @@ int istgt_lu_clear_task_ITL(CONN_Ptr conn, ISTGT_LU_Ptr lu, uint64_t lun) {
       }
       break;
 
-    case ISTGT_LU_TYPE_DVD:
-    case ISTGT_LU_TYPE_TAPE:
     case ISTGT_LU_TYPE_NONE:
     default:
       ISTGT_ERRLOG("LU%d: unsupported type\n", lu->num);
@@ -3084,8 +2895,6 @@ int istgt_lu_clear_task_ITLQ(CONN_Ptr conn,
       }
       break;
 
-    case ISTGT_LU_TYPE_DVD:
-    case ISTGT_LU_TYPE_TAPE:
     case ISTGT_LU_TYPE_NONE:
     default:
       ISTGT_ERRLOG("LU%d: unsupported type\n", lu->num);
@@ -3116,9 +2925,6 @@ int istgt_lu_clear_all_task(ISTGT_LU_Ptr lu, uint64_t lun) {
       }
       break;
 
-    case ISTGT_LU_TYPE_DVD:
-    case ISTGT_LU_TYPE_TAPE:
-    case ISTGT_LU_TYPE_NONE:
     default:
       ISTGT_ERRLOG("LU%d: unsupported type\n", lu->num);
       return -1;
@@ -3129,7 +2935,6 @@ int istgt_lu_clear_all_task(ISTGT_LU_Ptr lu, uint64_t lun) {
 
 static void* luworker(void* arg) {
   ISTGT_LU_Ptr lu = (ISTGT_LU_Ptr) arg;
-  sigset_t signew, sigold;
 #if 0
 	struct timespec abstime;
 	time_t now;
@@ -3138,11 +2943,6 @@ static void* luworker(void* arg) {
   int qcnt;
   int lun;
   int rc;
-
-  sigemptyset(&signew);
-  sigemptyset(&sigold);
-  sigaddset(&signew, ISTGT_SIGWAKEUP);
-  pthread_sigmask(SIG_UNBLOCK, &signew, &sigold);
 
   while (istgt_get_state(lu->istgt) != ISTGT_STATE_RUNNING) {
     if (istgt_get_state(lu->istgt) == ISTGT_STATE_EXITING ||
@@ -3217,9 +3017,6 @@ static void* luworker(void* arg) {
         }
         break;
 
-      case ISTGT_LU_TYPE_DVD:
-      case ISTGT_LU_TYPE_TAPE:
-      case ISTGT_LU_TYPE_NONE:
       default:
         ISTGT_ERRLOG("LU%d: unsupported type\n", lu->num);
         return NULL;

@@ -52,7 +52,6 @@ CONFIG* istgt_allocate_config(void) {
 
   cp = xmalloc(sizeof *cp);
   memset(cp, 0, sizeof *cp);
-  cp->file = NULL;
   cp->section = NULL;
 
   return cp;
@@ -64,7 +63,6 @@ void istgt_free_config(CONFIG* cp) {
   if (cp->section != NULL) {
     istgt_free_all_cf_section(cp->section);
   }
-  xfree(cp->file);
   xfree(cp);
 }
 
@@ -400,24 +398,15 @@ static char* fgets_line(FILE* fp) {
   return NULL;
 }
 
-int istgt_read_config(CONFIG* cp, const char* file) {
-  FILE* fp;
-  char *lp, *p;
-  char *lp2, *q;
+int istgt_read_config(CONFIG* cp, size_t cfgc, const char* cfgv[]) {
+  char *p, *lp;
   int line;
-  int n, n2;
-
-  if (file == NULL || file[0] == '\0')
-    return -1;
-  fp = fopen(file, "r");
-  if (fp == NULL) {
-    fprintf(stderr, "open error: %s\n", file);
-    return -1;
-  }
-  cp->file = xstrdup(file);
 
   line = 1;
-  while ((lp = fgets_line(fp)) != NULL) {
+  const char* config_line;
+  size_t row = 0;
+  while ((row < cfgc) && (config_line = cfgv[row++])) {
+    lp = strdup(config_line);
     /* skip spaces */
     for (p = lp; *p != '\0' && isspace((int) *p); p++)
       ;
@@ -425,35 +414,15 @@ int istgt_read_config(CONFIG* cp, const char* file) {
     if (p[0] == '#' || p[0] == '\0')
       goto next_line;
 
-    /* concatenate line end with '\' */
-    n = strlen(p);
-    while (n > 2 && p[n - 1] == '\n' && p[n - 2] == '\\') {
-      n -= 2;
-      lp2 = fgets_line(fp);
-      if (lp2 == NULL)
-        break;
-      line++;
-      n2 = strlen(lp2);
-      q = xmalloc(n + n2 + 1);
-      memcpy(q, p, n);
-      memcpy(q + n, lp2, n2);
-      q[n + n2] = '\0';
-      xfree(lp2);
-      xfree(lp);
-      p = lp = q;
-      n += n2;
-    }
-
     /* parse one line */
     if (parse_line(cp, p) < 0) {
-      fprintf(stderr, "parse error at line %d of %s\n", line, cp->file);
+      fprintf(stderr, "parse error at line %d\n", line);
     }
   next_line:
     line++;
     xfree(lp);
   }
 
-  fclose(fp);
   return 0;
 }
 
