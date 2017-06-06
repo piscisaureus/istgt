@@ -57,7 +57,6 @@
 #include "istgt_proto.h"
 #include "istgt_scsi.h"
 #include "istgt_sock.h"
-#include "istgt_ver.h"
 
 #define MAX_MASKBUF 128
 static int istgt_lu_allow_ipv6(const char* netmask, const char* addr) {

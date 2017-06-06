@@ -54,7 +54,6 @@
 #include "istgt_queue.h"
 #include "istgt_scsi.h"
 #include "istgt_sock.h"
-#include "istgt_ver.h"
 
 #include "auth_file.h"
 

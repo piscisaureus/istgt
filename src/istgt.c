@@ -50,7 +50,6 @@
 #include "istgt_platform.h"
 #include "istgt_proto.h"
 #include "istgt_sock.h"
-#include "istgt_ver.h"
 
 #include "config_file.h"
 
@@ -2183,10 +2182,6 @@ int main(int argc, char** argv) {
   istgt->config_old = NULL;
   // istgt_print_config(config);
 
-  /* open log files */
-
-  ISTGT_NOTICELOG(
-      "istgt version %s (%s)\n", ISTGT_VERSION, ISTGT_EXTRA_VERSION);
 #ifdef ISTGT_USE_KQUEUE
   ISTGT_NOTICELOG("using kqueue\n");
 #else
@@ -2267,9 +2262,6 @@ int main(int argc, char** argv) {
     retry--;
   }
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "retry=%d\n", retry);
-
-  ISTGT_NOTICELOG(
-      "istgt version %s (%s) exiting\n", ISTGT_VERSION, ISTGT_EXTRA_VERSION);
 
   /* cleanup */
   istgt_close_all_portals(istgt);

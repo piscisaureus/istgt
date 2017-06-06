@@ -52,7 +52,6 @@
 #include "istgt_queue.h"
 #include "istgt_scsi.h"
 #include "istgt_sock.h"
-#include "istgt_ver.h"
 
 #if !defined(__GNUC__)
 #undef __attribute__
