@@ -7,10 +7,7 @@ Files: *
 Copyright: (C) 2008-2012 Daisuke Aoyama <aoyama@peach.ne.jp>
 License: BSD 2-clause
 
-Files: src/md5.*
+Files: src/istgt_md5.*
 Copyright: (c) 1995 - 2001 Kungliga Tekniska Högskolan
 License: BSD 3-clause
 
-Files: src/hash.h
-Copyright: (c) 1999 Kungliga Tekniska Högskolan
-License: BSD 3-clause
