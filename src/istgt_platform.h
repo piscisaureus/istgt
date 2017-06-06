@@ -67,8 +67,6 @@ void istgt_platform_init(void);
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 
-char* strsep(char** stringp, const char* delim);
-
 #define SSIZE_T_DEFINED
 typedef intptr_t ssize_t;
 #define SSIZE_MAX INTPTR_MAX

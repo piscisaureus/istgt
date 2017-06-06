@@ -158,6 +158,9 @@ char* xstrdup(const char* s);
 char* strlwr(char* s);
 char* strupr(char* s);
 #endif /* _WIN32 */
+#ifdef _WIN32
+char* strsep(char** stringp, const char* delim);
+#endif
 char* strsepq(char** stringp, const char* delim);
 char* trim_string(char* s);
 char* escape_string(const char* s);

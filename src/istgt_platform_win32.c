@@ -10,25 +10,6 @@
 
 #include "istgt_platform.h"
 
-char* strsep(char** stringp, const char* delim) {
-  char* start = *stringp;
-  char* token;
-
-  if (start == NULL)
-    return NULL;
-
-  token = strpbrk(start, delim);
-  if (token != NULL) {
-    *stringp = NULL;
-  } else {
-    *token = '\0';
-    *stringp = token + 1;
-  }
-
-  return start;
-}
-
-
 int fsync(int fd) {
   return _commit(fd);
 }

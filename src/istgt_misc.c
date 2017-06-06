@@ -136,6 +136,25 @@ char* strupr(char* s) {
 }
 #endif
 
+#ifdef _WIN32
+char* strsep(char** stringp, const char* delim) {
+  char* start = *stringp;
+  char* token;
+
+  if (start == NULL)
+    return NULL;
+
+  token = strpbrk(start, delim);
+  if (token != NULL) {
+    *stringp = NULL;
+  } else {
+    *token = '\0';
+    *stringp = token + 1;
+  }
+
+  return start;
+}
+#endif  // _WIN32
 
 char* strsepq(char** stringp, const char* delim) {
   char *p, *q, *r;
