@@ -99,242 +99,6 @@ static int istgt_lu_disk_build_sense_data(
 static int istgt_lu_disk_queue_abort_ITL(ISTGT_LU_DISK* spec,
                                          const char* initiator_port);
 
-static int istgt_lu_disk_open_raw(ISTGT_LU_DISK* spec, int flags, int mode) {
-  int rc;
-  rc = open(spec->file, flags, mode);
-  if (rc < 0) {
-    return -1;
-  }
-  spec->fd = rc;
-  spec->foffset = 0;
-  return 0;
-}
-
-static int istgt_lu_disk_close_raw(ISTGT_LU_DISK* spec) {
-  int rc;
-
-  if (spec->fd == -1)
-    return 0;
-  rc = close(spec->fd);
-  if (rc < 0) {
-    return -1;
-  }
-  spec->fd = -1;
-  spec->foffset = 0;
-  return 0;
-}
-
-#if 0
-static off_t
-istgt_lu_disk_lseek_raw(ISTGT_LU_DISK *spec, off_t offset, int whence)
-{
-	off_t rc;
-
-	rc = lseek(spec->fd, offset, whence);
-	if (rc < 0) {
-		return -1;
-	}
-	spec->foffset = offset;
-	return rc;
-}
-#endif
-
-static int64_t istgt_lu_disk_seek_raw(ISTGT_LU_DISK* spec, uint64_t offset) {
-  fprintf(stderr, "Seek: %lld\n", (unsigned long long) offset);
-
-#ifndef _WIN32
-  // On windows we use the moral equivalent of pread/pwrite, so no need
-  // actually seek before read/write.
-  off_t rc = lseek(spec->fd, (off_t) offset, SEEK_SET);
-  if (rc < 0) {
-    return -1;
-  }
-  if (rc != offset)
-    abort();
-#endif  // !_WIN32
-  spec->foffset = offset;
-  return 0;
-}
-
-static int64_t istgt_lu_disk_read_raw(ISTGT_LU_DISK* spec,
-                                      void* buf,
-                                      uint64_t nbytes) {
-  int64_t rc;
-  fprintf(stderr, "Read: %d\n", (int) nbytes);
-
-#ifdef _WIN32
-  OVERLAPPED o = {0};
-  LARGE_INTEGER offset = {.QuadPart = spec->foffset};
-  o.Offset = offset.LowPart;
-  o.OffsetHigh = offset.HighPart;
-  HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
-  DWORD bytes_read;
-  if (!ReadFile(handle, buf, nbytes, &bytes_read, &o)) {
-    if (GetLastError() == ERROR_HANDLE_EOF) {
-      memset(buf, 0, nbytes);
-      rc = nbytes;
-    } else {
-      return -1;
-    }
-  } else {
-    rc = bytes_read;
-  }
-
-#else   // _WIN32
-  rc = (int64_t) read(spec->fd, buf, (size_t) nbytes);
-  if (rc < 0) {
-    return -1;
-  }
-#endif  // _WIN32
-
-  spec->foffset += rc;
-  return rc;
-}
-
-static int64_t istgt_lu_disk_write_raw(ISTGT_LU_DISK* spec,
-                                       const void* buf,
-                                       uint64_t nbytes) {
-  int64_t rc;
-  fprintf(stderr, "Write: %d\n", (int) nbytes);
-
-#ifdef _WIN32
-  OVERLAPPED o = {0};
-  LARGE_INTEGER offset = {.QuadPart = spec->foffset};
-  o.Offset = offset.LowPart;
-  o.OffsetHigh = offset.HighPart;
-  HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
-  DWORD bytes_written;
-  if (!WriteFile(handle, buf, nbytes, &bytes_written, &o))
-    return -1;
-
-  rc = bytes_written;
-
-#else   // _WIN32
-  rc = (int64_t) write(spec->fd, buf, (size_t) nbytes);
-  if (rc < 0)
-    return -1;
-#endif  // _WIN32
-
-
-  spec->foffset += rc;
-  if (spec->foffset > spec->fsize) {
-    spec->fsize = spec->foffset;
-  }
-  return rc;
-}
-
-static int64_t istgt_lu_disk_sync_raw(ISTGT_LU_DISK* spec,
-                                      uint64_t offset,
-                                      uint64_t nbytes) {
-  /*int64_t rc;
-
-  rc = (int64_t) fsync(spec->fd);
-  if (rc < 0) {
-          return -1;
-  }
-  spec->foffset = offset + nbytes;
-  return rc; */
-  return 0;
-}
-
-static int istgt_lu_disk_allocate_raw(ISTGT_LU_DISK* spec) {
-  uint8_t* data;
-  uint64_t fsize;
-  uint64_t size;
-  uint64_t blocklen;
-  uint64_t offset;
-  uint64_t nbytes;
-  int64_t rc;
-
-  size = spec->size;
-  blocklen = spec->blocklen;
-  nbytes = blocklen;
-  data = xmalloc(nbytes);
-  memset(data, 0, nbytes);
-
-  fsize = istgt_lu_get_filesize(spec->file);
-  if (fsize > size) {
-    xfree(data);
-    return 0;
-  }
-  spec->fsize = fsize;
-
-  offset = size - nbytes;
-  rc = istgt_lu_disk_seek_raw(spec, offset);
-  if (rc == -1) {
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    xfree(data);
-    return -1;
-  }
-  rc = istgt_lu_disk_read_raw(spec, data, nbytes);
-  /* EOF is OK */
-  if (rc == -1) {
-    ISTGT_ERRLOG("lu_disk_read() failed\n");
-    xfree(data);
-    return -1;
-  }
-
-  /* allocate complete size */
-  rc = istgt_lu_disk_seek_raw(spec, offset);
-  if (rc == -1) {
-    ISTGT_ERRLOG("lu_disk_seek() failed\n");
-    xfree(data);
-    return -1;
-  }
-  rc = istgt_lu_disk_write_raw(spec, data, nbytes);
-  if (rc == -1 || (uint64_t) rc != nbytes) {
-    ISTGT_ERRLOG("lu_disk_write() failed\n");
-    xfree(data);
-    return -1;
-  }
-  spec->foffset = size;
-
-  xfree(data);
-  return 0;
-}
-
-static int istgt_lu_disk_setcache_raw(ISTGT_LU_DISK* spec) {
-#ifndef _WIN32
-  int flags;
-  int rc;
-  int fd;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_lu_disk_setcache\n");
-
-  fd = spec->fd;
-  if (spec->read_cache) {
-    /* not implement */
-  } else {
-    /* not implement */
-  }
-
-  flags = fcntl(fd, F_GETFL, 0);
-  if (flags != -1) {
-    if (spec->write_cache) {
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "write cache enable\n");
-      rc = fcntl(fd, F_SETFL, (flags & ~O_FSYNC));
-      spec->write_cache = 1;
-    } else {
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "write cache disable\n");
-      rc = fcntl(fd, F_SETFL, (flags | O_FSYNC));
-      spec->write_cache = 0;
-    }
-    if (rc == -1) {
-#if 0
-			ISTGT_ERRLOG("LU%d: LUN%d: fcntl(F_SETFL) failed(errno=%d)\n",
-			    spec->num, spec->lun, errno);
-#endif
-    }
-  } else {
-    ISTGT_ERRLOG("LU%d: LUN%d: fcntl(F_GETFL) failed(errno=%d)\n",
-                 spec->num,
-                 spec->lun,
-                 errno);
-  }
-#endif  // _WIN32
-
-  return 0;
-}
 
 static const char* istgt_get_disktype_by_ext(const char* file) {
   size_t n;
@@ -463,6 +227,7 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
     spec->file = lu->lun[i].u.storage.file;
     spec->size = lu->lun[i].u.storage.size;
     spec->disktype = istgt_get_disktype_by_ext(spec->file);
+
     if (strcasecmp(spec->disktype, "VDI") == 0 ||
         strcasecmp(spec->disktype, "VHD") == 0 ||
         strcasecmp(spec->disktype, "VMDK") == 0 ||
@@ -476,39 +241,20 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
         goto error_return;
       }
     } else if (strcasecmp(spec->disktype, "RAW") == 0) {
-      spec->open = istgt_lu_disk_open_raw;
-      spec->close = istgt_lu_disk_close_raw;
-      spec->seek = istgt_lu_disk_seek_raw;
-      spec->read = istgt_lu_disk_read_raw;
-      spec->write = istgt_lu_disk_write_raw;
-      spec->sync = istgt_lu_disk_sync_raw;
-      spec->allocate = istgt_lu_disk_allocate_raw;
-      spec->setcache = istgt_lu_disk_setcache_raw;
-
-      spec->blocklen = lu->blocklen;
-      if (spec->blocklen != 512 && spec->blocklen != 1024 &&
-          spec->blocklen != 2048 && spec->blocklen != 4096 &&
-          spec->blocklen != 8192 && spec->blocklen != 16384 &&
-          spec->blocklen != 32768 && spec->blocklen != 65536 &&
-          spec->blocklen != 131072 && spec->blocklen != 262144 &&
-          spec->blocklen != 524288) {
-        ISTGT_ERRLOG("LU%d: LUN%d: invalid blocklen %" PRIu64 "\n",
-                     lu->num,
-                     i,
-                     spec->blocklen);
-      error_return:
-        (void) pthread_mutex_destroy(&spec->wait_lu_task_mutex);
-        (void) pthread_mutex_destroy(&spec->cmd_queue_mutex);
-        (void) pthread_mutex_destroy(&spec->ats_mutex);
-        istgt_queue_destroy(&spec->cmd_queue);
-        xfree(spec);
-        return -1;
-      }
-      spec->blockcnt = spec->size / spec->blocklen;
-      if (spec->blockcnt == 0) {
-        ISTGT_ERRLOG("LU%d: LUN%d: size zero\n", lu->num, i);
+      rc = istgt_lu_disk_raw_lun_init(spec, istgt, lu);
+      if (rc < 0) {
+        ISTGT_ERRLOG(
+            "LU%d: LUN%d: lu_disk_raw_lun_init() failed\n", lu->num, i);
         goto error_return;
       }
+    } else {
+      ISTGT_ERRLOG("LU%d: LUN%d: unsupported format\n", lu->num, i);
+      goto error_return;
+    }
+
+    spec->blockcnt = spec->size / spec->blocklen;
+    if (spec->blockcnt == 0)
+      ISTGT_WARNLOG("LU%d: LUN%d: size zero\n", lu->num, i);
 
 #if 0
 			ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
@@ -519,44 +265,39 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
 			    PRIu64" bytes/block\n",
 			    lu->num, i, spec->blockcnt, spec->blocklen);
 #endif
-      printf("LU%d: LUN%d file=%s, size=%" PRIu64 "\n",
-             lu->num,
-             i,
-             spec->file,
-             spec->size);
-      printf("LU%d: LUN%d %" PRIu64 " blocks, %" PRIu64 " bytes/block\n",
-             lu->num,
-             i,
-             spec->blockcnt,
-             spec->blocklen);
+    printf("LU%d: LUN%d file=%s, size=%" PRIu64 "\n",
+           lu->num,
+           i,
+           spec->file,
+           spec->size);
+    printf("LU%d: LUN%d %" PRIu64 " blocks, %" PRIu64 " bytes/block\n",
+           lu->num,
+           i,
+           spec->blockcnt,
+           spec->blocklen);
 
-      flags = lu->readonly ? O_RDONLY : O_RDWR;
-      newfile = 0;
+    flags = lu->readonly ? O_RDONLY : O_RDWR;
+    newfile = 0;
+    rc = spec->open(spec, flags, 0666);
+    if (rc < 0) {
+      newfile = 1;
+      flags = lu->readonly ? O_RDONLY : (O_CREAT | O_EXCL | O_RDWR);
       rc = spec->open(spec, flags, 0666);
       if (rc < 0) {
-        newfile = 1;
-        flags = lu->readonly ? O_RDONLY : (O_CREAT | O_EXCL | O_RDWR);
-        rc = spec->open(spec, flags, 0666);
-        if (rc < 0) {
-          ISTGT_ERRLOG(
-              "LU%d: LUN%d: open error(errno=%d)\n", lu->num, i, errno);
-          goto error_return;
-        }
-      }
-      if (!lu->readonly) {
-        rc = spec->allocate(spec);
-        if (rc < 0) {
-          ISTGT_ERRLOG("LU%d: LUN%d: allocate error\n", lu->num, i);
-          goto error_return;
-        }
-      }
-      rc = spec->setcache(spec);
-      if (rc < 0) {
-        ISTGT_ERRLOG("LU%d: LUN%d: setcache error\n", lu->num, i);
+        ISTGT_ERRLOG("LU%d: LUN%d: open error(errno=%d)\n", lu->num, i, errno);
         goto error_return;
       }
-    } else {
-      ISTGT_ERRLOG("LU%d: LUN%d: unsupported format\n", lu->num, i);
+    }
+    if (!lu->readonly) {
+      rc = spec->allocate(spec);
+      if (rc < 0) {
+        ISTGT_ERRLOG("LU%d: LUN%d: allocate error\n", lu->num, i);
+        goto error_return;
+      }
+    }
+    rc = spec->setcache(spec);
+    if (rc < 0) {
+      ISTGT_ERRLOG("LU%d: LUN%d: setcache error\n", lu->num, i);
       goto error_return;
     }
 
@@ -629,6 +370,14 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
   }
 
   return 0;
+
+error_return:
+  (void) pthread_mutex_destroy(&spec->wait_lu_task_mutex);
+  (void) pthread_mutex_destroy(&spec->cmd_queue_mutex);
+  (void) pthread_mutex_destroy(&spec->ats_mutex);
+  istgt_queue_destroy(&spec->cmd_queue);
+  xfree(spec);
+  return -1;
 }
 
 int istgt_lu_disk_shutdown(ISTGT_Ptr istgt __attribute__((__unused__)),
@@ -664,16 +413,9 @@ int istgt_lu_disk_shutdown(ISTGT_Ptr istgt __attribute__((__unused__)),
         /* ignore error */
       }
     } else if (strcasecmp(spec->disktype, "RAW") == 0) {
-      if (!spec->lu->readonly) {
-        rc = spec->sync(spec, 0, spec->size);
-        if (rc < 0) {
-          // ISTGT_ERRLOG("LU%d: lu_disk_sync() failed\n", lu->num);
-          /* ignore error */
-        }
-      }
-      rc = spec->close(spec);
+      rc = istgt_lu_disk_raw_lun_shutdown(spec, istgt, lu);
       if (rc < 0) {
-        // ISTGT_ERRLOG("LU%d: lu_disk_close() failed\n", lu->num);
+        ISTGT_ERRLOG("LU%d: lu_disk_vbox_lun_shutdown() failed\n", lu->num);
         /* ignore error */
       }
     } else {

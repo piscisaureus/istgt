@@ -181,6 +181,14 @@ int istgt_lu_disk_queue(CONN_Ptr conn, ISTGT_LU_CMD_Ptr lu_cmd);
 int istgt_lu_disk_queue_count(ISTGT_LU_Ptr lu, int* lun);
 int istgt_lu_disk_queue_start(ISTGT_LU_Ptr lu, int lun);
 
+/* istgt_lu_disk_raw.c */
+int istgt_lu_disk_raw_lun_init(ISTGT_LU_DISK* spec,
+                               ISTGT_Ptr istgt,
+                               ISTGT_LU_Ptr lu);
+int istgt_lu_disk_raw_lun_shutdown(ISTGT_LU_DISK* spec,
+                                   ISTGT_Ptr istgt,
+                                   ISTGT_LU_Ptr lu);
+
 /* istgt_lu_disk_vbox.c */
 int istgt_lu_disk_vbox_lun_init(ISTGT_LU_DISK* spec,
                                 ISTGT_Ptr istgt,
