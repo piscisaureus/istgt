@@ -650,13 +650,14 @@ char* istgt_lu_get_media_flags_string(int flags, char* buf, size_t len) {
 }
 
 uint64_t istgt_lu_get_filesize(const char* file) {
-  uint64_t val;
-  struct stat st;
   int rc;
-
-  val = 0ULL;
-
+#ifdef _WIN32
+  struct _stati64 st;
+  rc = _stati64(file, &st);
+#else   // _WIN32
+  struct stat st;
   rc = stat(file, &st);
+#endif  // _WIN32
   if (rc < 0)
     return 0;
 
