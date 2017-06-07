@@ -4830,21 +4830,19 @@ static void* worker(void* arg) {
     return NULL;
   }
 
-  if (!conn->istgt->daemon) {
-    ISTGT_EV_SET(&kev, SIGINT, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
-    rc = kevent(kq, &kev, 1, NULL, 0, NULL);
-    if (rc == -1) {
-      ISTGT_ERRLOG("kevent() failed\n");
-      close(kq);
-      return NULL;
-    }
-    ISTGT_EV_SET(&kev, SIGTERM, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
-    rc = kevent(kq, &kev, 1, NULL, 0, NULL);
-    if (rc == -1) {
-      ISTGT_ERRLOG("kevent() failed\n");
-      close(kq);
-      return NULL;
-    }
+  ISTGT_EV_SET(&kev, SIGINT, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
+  rc = kevent(kq, &kev, 1, NULL, 0, NULL);
+  if (rc == -1) {
+    ISTGT_ERRLOG("kevent() failed\n");
+    close(kq);
+    return NULL;
+  }
+  ISTGT_EV_SET(&kev, SIGTERM, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
+  rc = kevent(kq, &kev, 1, NULL, 0, NULL);
+  if (rc == -1) {
+    ISTGT_ERRLOG("kevent() failed\n");
+    close(kq);
+    return NULL;
   }
 #else
   memset(&fds, 0, sizeof fds);

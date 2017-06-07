@@ -1079,21 +1079,19 @@ static int istgt_acceptor(ISTGT_Ptr istgt) {
   spidx = nidx++;
   kqsocks[spidx] = istgt->sig_pipe.fd[0];
 
-  if (!istgt->daemon) {
-    ISTGT_EV_SET(&kev, SIGINT, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
-    rc = kevent(kq, &kev, 1, NULL, 0, NULL);
-    if (rc == -1) {
-      ISTGT_ERRLOG("kevent() failed\n");
-      close(kq);
-      return -1;
-    }
-    ISTGT_EV_SET(&kev, SIGTERM, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
-    rc = kevent(kq, &kev, 1, NULL, 0, NULL);
-    if (rc == -1) {
-      ISTGT_ERRLOG("kevent() failed\n");
-      close(kq);
-      return -1;
-    }
+  ISTGT_EV_SET(&kev, SIGINT, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
+  rc = kevent(kq, &kev, 1, NULL, 0, NULL);
+  if (rc == -1) {
+    ISTGT_ERRLOG("kevent() failed\n");
+    close(kq);
+    return -1;
+  }
+  ISTGT_EV_SET(&kev, SIGTERM, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
+  rc = kevent(kq, &kev, 1, NULL, 0, NULL);
+  if (rc == -1) {
+    ISTGT_ERRLOG("kevent() failed\n");
+    close(kq);
+    return -1;
   }
 #else
   memset(&fds, 0, sizeof fds);
@@ -1272,7 +1270,6 @@ int main(int argc, char** argv) {
 
   istgt->state = ISTGT_STATE_INVALID;
   istgt->sig_pipe = istgt_control_pipe_init();
-  istgt->daemon = 0;
 
   /* read config files */
   config = istgt_allocate_config();

@@ -183,7 +183,6 @@ typedef struct istgt_t {
 
   ISTGT_STATE state;
   istgt_control_pipe_t sig_pipe;
-  int daemon;
 
   int nportal_group;
   PORTAL_GROUP portal_group[MAX_PORTAL_GROUP];
