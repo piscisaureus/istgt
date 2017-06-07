@@ -32,6 +32,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5316,6 +5317,7 @@ int istgt_create_conn(ISTGT_Ptr istgt,
 
   switch (sa->sa_family) {
     case AF_INET6:
+      assert(salen >= sizeof(struct sockaddr_in6));
       conn->initiator_family = AF_INET6;
       rc = istgt_getaddr(sock,
                          conn->target_addr,
@@ -5328,6 +5330,7 @@ int istgt_create_conn(ISTGT_Ptr istgt,
       }
       break;
     case AF_INET:
+      assert(salen >= sizeof(struct sockaddr_in));
       conn->initiator_family = AF_INET;
       rc = istgt_getaddr(sock,
                          conn->target_addr,
