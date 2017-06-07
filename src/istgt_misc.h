@@ -130,6 +130,9 @@
 
 #define UNUSED(V) ((void) (V))
 
+#define STATIC_ASSERT(condition, message) \
+  typedef char static_assertion_##__FILE__##_##__LINE__[(condition) ? 1 : -1]
+
 #ifdef _WIN32
 _declspec(noreturn)
 #else  // _WIN32
