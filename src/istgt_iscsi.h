@@ -134,7 +134,7 @@ typedef struct iscsi_ahs_t {
   uint8_t ahs_type;
   uint8_t ahs_specific1;
   /* 4-x */
-  uint8_t ahs_specific2[];
+  uint8_t ahs_specific2[1];
 } ISCSI_AHS;
 
 typedef struct iscsi_pdu_t {
