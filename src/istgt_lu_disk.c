@@ -4128,7 +4128,7 @@ static int istgt_lu_disk_lbsync(ISTGT_LU_DISK* spec,
     return -1;
   }
 
-  rc = spec->sync(spec, offset, nbytes);
+  rc = spec->sync(spec, nbytes, offset);
   if (rc < 0) {
     ISTGT_ERRLOG("lu_disk_sync() failed\n");
     return -1;
@@ -4313,7 +4313,7 @@ int istgt_lu_disk_reset(ISTGT_LU_Ptr lu, int lun) {
 
   /* re-open file */
   if (!spec->lu->readonly) {
-    rc = spec->sync(spec, 0, spec->size);
+    rc = spec->sync(spec, spec->size, 0);
     if (rc < 0) {
       ISTGT_ERRLOG("LU%d: LUN%d: lu_disk_sync() failed\n", lu->num, lun);
       /* ignore error */
