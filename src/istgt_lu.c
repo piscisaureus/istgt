@@ -154,9 +154,11 @@ static int istgt_lu_allow_ipv4(const char* netmask, const char* addr) {
   }
 
   /* check 32bits */
-  bmask = (0xffffffffU << (32 - bits)) & 0xffffffffU;
-  if ((ntohl(in4_mask.s_addr) & bmask) != (ntohl(in4_addr.s_addr) & bmask))
-    return 0;
+  if (bits > 0) {
+    bmask = (0xffffffffU << (32 - bits)) & 0xffffffffU;
+    if ((ntohl(in4_mask.s_addr) & bmask) != (ntohl(in4_addr.s_addr) & bmask))
+      return 0;
+  }
 
   /* match */
   return 1;
