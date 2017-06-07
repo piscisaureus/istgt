@@ -6152,6 +6152,7 @@ CONN_Ptr istgt_find_conn(const char* initiator_port,
                  target_name,
                  tsih);
   sess = NULL;
+  conn = NULL;
   rc = -1;
   // MTX_LOCK(&g_conns_mutex);
   for (i = 0; i < g_nconns; i++) {
