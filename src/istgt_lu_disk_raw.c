@@ -135,49 +135,6 @@ static int istgt_lu_disk_allocate_raw(ISTGT_LU_DISK* spec) {
   return 0;
 }
 
-static int istgt_lu_disk_setcache_raw(ISTGT_LU_DISK* spec) {
-#ifndef _WIN32
-  int flags;
-  int rc;
-  int fd;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_lu_disk_setcache\n");
-
-  fd = spec->fd;
-  if (spec->read_cache) {
-    /* not implement */
-  } else {
-    /* not implement */
-  }
-
-  flags = fcntl(fd, F_GETFL, 0);
-  if (flags != -1) {
-    if (spec->write_cache) {
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "write cache enable\n");
-      rc = fcntl(fd, F_SETFL, (flags & ~O_FSYNC));
-      spec->write_cache = 1;
-    } else {
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "write cache disable\n");
-      rc = fcntl(fd, F_SETFL, (flags | O_FSYNC));
-      spec->write_cache = 0;
-    }
-    if (rc == -1) {
-#if 0
-      ISTGT_ERRLOG("LU%d: LUN%d: fcntl(F_SETFL) failed(errno=%d)\n",
-        spec->num, spec->lun, errno);
-#endif
-    }
-  } else {
-    ISTGT_ERRLOG("LU%d: LUN%d: fcntl(F_GETFL) failed(errno=%d)\n",
-                 spec->num,
-                 spec->lun,
-                 errno);
-  }
-#endif  // _WIN32
-
-  return 0;
-}
-
 int istgt_lu_disk_raw_lun_init(ISTGT_LU_DISK* spec,
                                ISTGT_Ptr istgt,
                                ISTGT_LU_Ptr lu) {
@@ -194,7 +151,6 @@ int istgt_lu_disk_raw_lun_init(ISTGT_LU_DISK* spec,
   spec->pwrite = istgt_lu_disk_pwrite_raw;
   spec->sync = istgt_lu_disk_sync_raw;
   spec->allocate = istgt_lu_disk_allocate_raw;
-  spec->setcache = istgt_lu_disk_setcache_raw;
 
   spec->blocklen = lu->blocklen;
   if (spec->blocklen != 512 && spec->blocklen != 1024 &&

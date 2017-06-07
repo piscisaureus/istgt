@@ -153,16 +153,6 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
     spec->num = lu->num;
     spec->lun = i;
     spec->fd = -1;
-    if (spec->lu->lun[i].readcache) {
-      spec->read_cache = 1;
-    } else {
-      spec->read_cache = 0;
-    }
-    if (spec->lu->lun[i].writecache) {
-      spec->write_cache = 1;
-    } else {
-      spec->write_cache = 0;
-    }
 
     spec->wbufsize = 0;
     spec->wbuf = NULL;
@@ -288,11 +278,6 @@ int istgt_lu_disk_init(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
         ISTGT_ERRLOG("LU%d: LUN%d: allocate error\n", lu->num, i);
         goto error_return;
       }
-    }
-    rc = spec->setcache(spec);
-    if (rc < 0) {
-      ISTGT_ERRLOG("LU%d: LUN%d: setcache error\n", lu->num, i);
-      goto error_return;
     }
 
     gb_size = spec->size / ISTGT_LU_1GB;

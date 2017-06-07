@@ -147,8 +147,6 @@ typedef struct istgt_lu_lun_t {
   } u;
   int rotationrate;
   int formfactor;
-  int readcache;
-  int writecache;
   char* serial;
   void* spec;
 } ISTGT_LU_LUN;
@@ -390,7 +388,6 @@ typedef struct istgt_lu_disk_t {
                   uint64_t nbytes,
                   uint64_t offset);
   int (*allocate)(struct istgt_lu_disk_t* spec);
-  int (*setcache)(struct istgt_lu_disk_t* spec);
 } ISTGT_LU_DISK;
 
 #endif /* ISTGT_LU_H */

@@ -1617,8 +1617,6 @@ static int istgt_lu_add_unit(ISTGT_Ptr istgt, CF_SECTION* sp) {
     lu->lun[i].type = ISTGT_LU_LUN_TYPE_NONE;
     lu->lun[i].rotationrate = DEFAULT_LU_ROTATIONRATE;
     lu->lun[i].formfactor = DEFAULT_LU_FORMFACTOR;
-    lu->lun[i].readcache = 1;
-    lu->lun[i].writecache = 1;
     lu->lun[i].serial = NULL;
     lu->lun[i].spec = NULL;
     snprintf(buf, sizeof buf, "LUN%d", i);
@@ -1798,22 +1796,6 @@ static int istgt_lu_add_unit(ISTGT_Ptr istgt, CF_SECTION* sp) {
             formfactor = 0xf;
           }
           lu->lun[i].formfactor = formfactor;
-        } else if (strcasecmp(key, "ReadCache") == 0) {
-          if (strcasecmp(val, "Enable") == 0) {
-            lu->lun[i].readcache = 1;
-          } else if (strcasecmp(val, "Disable") == 0) {
-            lu->lun[i].readcache = 0;
-          } else {
-            ISTGT_ERRLOG("LU%d: LUN%d: unknown val(%s)\n", lu->num, i, val);
-          }
-        } else if (strcasecmp(key, "WriteCache") == 0) {
-          if (strcasecmp(val, "Enable") == 0) {
-            lu->lun[i].writecache = 1;
-          } else if (strcasecmp(val, "Disable") == 0) {
-            lu->lun[i].writecache = 0;
-          } else {
-            ISTGT_ERRLOG("LU%d: LUN%d: unknown val(%s)\n", lu->num, i, val);
-          }
         } else {
           ISTGT_WARNLOG("LU%d: LUN%d: unknown key(%s)\n", lu->num, i, key);
           continue;
