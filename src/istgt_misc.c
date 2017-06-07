@@ -278,28 +278,6 @@ char* escape_string(const char* s) {
   return r;
 }
 
-/* LBA = (M * 60 + S) * 75 + F - 150 */
-uint32_t istgt_msf2lba(uint32_t msf) {
-  uint32_t lba;
-
-  lba = ((msf >> 16) & 0xff) * 60 * 75;
-  lba += ((msf >> 8) & 0xff) * 75;
-  lba += msf & 0xff;
-  lba -= 150;
-  return lba;
-}
-
-uint32_t istgt_lba2msf(uint32_t lba) {
-  uint32_t m, s, f;
-
-  lba += 150;
-  m = (lba / 75) / 60;
-  s = (lba / 75) % 60;
-  f = lba % 75;
-
-  return ((m << 16) | (s << 8) | f);
-}
-
 int istgt_difftime(time_t a, time_t b) {
   double d;
   /* don't want floating-point format */

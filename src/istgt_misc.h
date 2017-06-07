@@ -149,10 +149,6 @@ char* escape_string(const char* s);
 size_t strlcpy(char* dst, const char* src, size_t size);
 #endif /* HAVE_STRLCPY */
 
-/* convert from/to LBA/MSF */
-uint32_t istgt_msf2lba(uint32_t msf);
-uint32_t istgt_lba2msf(uint32_t lba);
-
 /* random value generation */
 void istgt_gen_random(uint8_t* buf, size_t len);
 #ifndef HAVE_SRANDOMDEV
