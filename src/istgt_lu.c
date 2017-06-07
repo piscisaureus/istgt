@@ -2089,7 +2089,7 @@ int istgt_lu_set_all_state(ISTGT_Ptr istgt, ISTGT_STATE state) {
   return 0;
 }
 
-static int istgt_lu_create_thread(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
+static int istgt_lu_create_thread(ISTGT_LU_Ptr lu) {
 #ifdef HAVE_PTHREAD_SET_NAME_NP
   char buf[MAX_TMPBUF];
 #endif
@@ -2130,7 +2130,7 @@ int istgt_lu_create_threads(ISTGT_Ptr istgt) {
     lu = istgt->logical_unit[i];
     if (lu == NULL)
       continue;
-    rc = istgt_lu_create_thread(istgt, lu);
+    rc = istgt_lu_create_thread(lu);
     if (rc < 0) {
       ISTGT_ERRLOG("lu_create_thread() failed\n");
       return -1;
