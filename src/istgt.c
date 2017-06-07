@@ -1259,6 +1259,9 @@ static int istgt_acceptor(ISTGT_Ptr istgt) {
 }
 
 int main(int argc, char** argv) {
+  UNUSED(argc);
+  UNUSED(argv);
+
   ISTGT_Ptr istgt;
   CONFIG* config;
   int retry = 10;
