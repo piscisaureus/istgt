@@ -44,7 +44,6 @@
 #endif
 #endif /* USE_ATOMIC */
 
-#include <signal.h>
 #include <stdint.h>
 
 #include "istgt.h"
