@@ -697,8 +697,6 @@ ssize_t istgt_writev_socket(int fd, const struct iovec* iov, int iovcnt) {
   DWORD bytes_sent;
   if (WSASend(fd, buf, buf_count, &bytes_sent, 0, NULL, NULL) ==
       SOCKET_ERROR) {
-    DWORD err = WSAGetLastError();
-
     if (WSAGetLastError() == WSAEWOULDBLOCK)
       return 0;
     return -1;
