@@ -16,7 +16,8 @@ int fsync(int fd) {
 
 ssize_t pread(int fd, void* buf, size_t count, uint64_t offset) {
   OVERLAPPED o = {0};
-  LARGE_INTEGER offset_li = {.QuadPart = offset};
+  LARGE_INTEGER offset_li;
+  offset_li.QuadPart = offset;
   o.Offset = offset_li.LowPart;
   o.OffsetHigh = offset_li.HighPart;
   HANDLE handle = (HANDLE) _get_osfhandle(fd);
@@ -28,7 +29,8 @@ ssize_t pread(int fd, void* buf, size_t count, uint64_t offset) {
 
 ssize_t pwrite(int fd, const void* buf, size_t count, uint64_t offset) {
   OVERLAPPED o = {0};
-  LARGE_INTEGER offset_li = {.QuadPart = offset};
+  LARGE_INTEGER offset_li;
+  offset_li.QuadPart = offset;
   o.Offset = offset_li.LowPart;
   o.OffsetHigh = offset_li.HighPart;
   HANDLE handle = (HANDLE) _get_osfhandle(fd);
