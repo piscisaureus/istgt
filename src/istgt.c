@@ -1269,23 +1269,10 @@ static int istgt_acceptor(ISTGT_Ptr istgt) {
   return 0;
 }
 
-static void usage(void) {
-  printf("istgt [options]\n");
-  printf("options:\n");
-  printf(" -t flag    trace flag (all, net, iscsi, scsi, lu)\n");
-  printf(" -q         quiet warnings\n");
-  printf(" -H         show this usage\n");
-  printf(" -V         show version\n");
-}
-
 int main(int argc, char** argv) {
   ISTGT_Ptr istgt;
   CONFIG* config;
   int retry = 10;
-#if 0
-  int swmode;
-	int ch;
-#endif
   int rc;
 
   istgt_platform_init();
@@ -1300,46 +1287,6 @@ int main(int argc, char** argv) {
   istgt->state = ISTGT_STATE_INVALID;
   istgt->sig_pipe = istgt_control_pipe_init();
   istgt->daemon = 0;
-
-#if 0
- 	while ((ch = getopt(argc, argv, "l:t:qDHV")) != -1) {
-		switch (ch) {
-		case 'l':
-			logfacility = optarg;
-			break;
-		case 't':
-			if (strcasecmp(optarg, "NET") == 0) {
-				istgt_set_trace_flag(ISTGT_TRACE_NET);
-			} else if (strcasecmp(optarg, "ISCSI") == 0) {
-				istgt_set_trace_flag(ISTGT_TRACE_ISCSI);
-			} else if (strcasecmp(optarg, "SCSI") == 0) {
-				istgt_set_trace_flag(ISTGT_TRACE_SCSI);
-			} else if (strcasecmp(optarg, "LU") == 0) {
-				istgt_set_trace_flag(ISTGT_TRACE_LU);
-			} else if (strcasecmp(optarg, "ALL") == 0) {
-				istgt_set_trace_flag(ISTGT_TRACE_ALL);
-			} else if (strcasecmp(optarg, "NONE") == 0) {
-				istgt_set_trace_flag(ISTGT_TRACE_NONE);
-			} else {
-				fprintf(stderr, "unknown flag\n");
-				usage();
-				exit(EXIT_FAILURE);
-			}
-			break;
-		case 'q':
-			g_warn_flag = 0;
-			break;
-		case 'V':
-			printf("istgt version %s\n", ISTGT_VERSION);
-			printf("istgt extra version %s\n", ISTGT_EXTRA_VERSION);
-			exit(EXIT_SUCCESS);
-		case 'H':
-		default:
-			usage();
-			exit(EXIT_SUCCESS);
-		}
-	}
-#endif
 
   /* read config files */
   config = istgt_allocate_config();
