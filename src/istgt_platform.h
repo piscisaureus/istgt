@@ -97,6 +97,8 @@ int socketpair(int domain, int type, int protocolint, int sv[2]);
 int poll(struct pollfd* fds, nfds_t nfds, int timeout);
 
 int fsync(int fd);
+ssize_t pread(int fd, void* buf, size_t count, uint64_t offset);
+ssize_t pwrite(int fd, const void* buf, size_t count, uint64_t offset);
 
 #define S_ISCHR(mode) 0
 #define S_ISBLK(mode) 0

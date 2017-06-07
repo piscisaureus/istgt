@@ -14,6 +14,30 @@ int fsync(int fd) {
   return _commit(fd);
 }
 
+ssize_t pread(int fd, void* buf, size_t count, uint64_t offset) {
+  OVERLAPPED o = {0};
+  LARGE_INTEGER offset_li = {.QuadPart = offset};
+  o.Offset = offset_li.LowPart;
+  o.OffsetHigh = offset_li.HighPart;
+  HANDLE handle = (HANDLE) _get_osfhandle(fd);
+  DWORD bytes_read;
+  if (!ReadFile(handle, buf, count, &bytes_read, &o))
+    return -1;
+  return bytes_read;
+}
+
+ssize_t pwrite(int fd, const void* buf, size_t count, uint64_t offset) {
+  OVERLAPPED o = {0};
+  LARGE_INTEGER offset_li = {.QuadPart = offset};
+  o.Offset = offset_li.LowPart;
+  o.OffsetHigh = offset_li.HighPart;
+  HANDLE handle = (HANDLE) _get_osfhandle(fd);
+  DWORD bytes_written;
+  if (!WriteFile(handle, buf, count, &bytes_written, &o))
+    return -1;
+  return bytes_written;
+}
+
 int pthread_mutex_init(pthread_mutex_t* mutex,
                        const pthread_mutexattr_t* attr) {
   InitializeCriticalSection(mutex);

@@ -56,32 +56,10 @@ static int64_t istgt_lu_disk_pread_raw(ISTGT_LU_DISK* spec,
   printf("pread: %llu at %llu\n",
          (unsigned long long) nbytes,
          (unsigned long long) offset);
-  int64_t rc;
 
-#ifdef _WIN32
-  OVERLAPPED o = {0};
-  LARGE_INTEGER offset_li = {.QuadPart = offset};
-  o.Offset = offset_li.LowPart;
-  o.OffsetHigh = offset_li.HighPart;
-  HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
-  DWORD bytes_read;
-  if (!ReadFile(handle, buf, nbytes, &bytes_read, &o)) {
-    if (GetLastError() == ERROR_HANDLE_EOF) {
-      memset(buf, 0, nbytes);
-      rc = nbytes;
-    } else {
-      return -1;
-    }
-  } else {
-    rc = bytes_read;
-  }
-
-#else   // _WIN32
-  rc = (int64_t) pread(spec->fd, buf, nbytes, offset);
-  if (rc < 0) {
+  ssize_t rc = pread(spec->fd, buf, nbytes, offset);
+  if (rc < 0)
     return -1;
-  }
-#endif  // _WIN32
 
   return rc;
 }
@@ -95,23 +73,9 @@ static int64_t istgt_lu_disk_pwrite_raw(ISTGT_LU_DISK* spec,
          (unsigned long long) nbytes,
          (unsigned long long) offset);
 
-#ifdef _WIN32
-  OVERLAPPED o = {0};
-  LARGE_INTEGER offset_li = {.QuadPart = offset};
-  o.Offset = offset_li.LowPart;
-  o.OffsetHigh = offset_li.HighPart;
-  HANDLE handle = (HANDLE) _get_osfhandle(spec->fd);
-  DWORD bytes_written;
-  if (!WriteFile(handle, buf, nbytes, &bytes_written, &o))
-    return -1;
-
-  rc = bytes_written;
-
-#else   // _WIN32
   rc = pwrite(spec->fd, buf, nbytes, offset);
   if (rc < 0)
     return -1;
-#endif  // _WIN32
 
   if (offset > spec->fsize) {
     spec->fsize = offset;
