@@ -1658,25 +1658,6 @@ static int istgt_stop_loop(ISTGT_Ptr istgt) {
   return 0;
 }
 
-
-static void istgt_sigint(int signo __attribute__((__unused__))) {}
-
-static void istgt_sigterm(int signo __attribute__((__unused__))) {}
-
-static void istgt_sighup(int signo __attribute__((__unused__))) {}
-
-#ifdef SIGINFO
-static void istgt_siginfo(int signo __attribute__((__unused__))) {
-  /* nothing */
-}
-#endif
-
-static void istgt_sigwakeup(int signo __attribute__((__unused__))) {}
-
-#ifdef SIGIO
-static void istgt_sigio(int signo __attribute__((__unused__))) {}
-#endif
-
 static PORTAL* istgt_get_sock_portal(ISTGT_Ptr istgt, int sock) {
   int i, j;
 
