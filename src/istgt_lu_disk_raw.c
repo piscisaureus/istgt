@@ -138,15 +138,11 @@ static int64_t istgt_lu_disk_write_raw(ISTGT_LU_DISK* spec,
 static int64_t istgt_lu_disk_sync_raw(ISTGT_LU_DISK* spec,
                                       uint64_t offset,
                                       uint64_t nbytes) {
-  /*int64_t rc;
-
-  rc = (int64_t) fsync(spec->fd);
-  if (rc < 0) {
-  return -1;
-  }
+  printf("sync: %llu at %llu\n",
+         (unsigned long long) nbytes,
+         (unsigned long long) offset);
   spec->foffset = offset + nbytes;
-  return rc; */
-  return 0;
+  return fsync(spec->fd);
 }
 
 static int istgt_lu_disk_allocate_raw(ISTGT_LU_DISK* spec) {
