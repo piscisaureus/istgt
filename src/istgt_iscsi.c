@@ -6575,7 +6575,7 @@ static int istgt_iscsi_drop_all_conns(CONN_Ptr conn) {
       num++;
     }
   }
-  istgt_yield();
+  sched_yield();
   sleep(1);
   if (num > max_conns + 1) {
     for (i = 0; i < g_nconns; i++) {
@@ -6664,7 +6664,7 @@ static int istgt_iscsi_drop_old_conns(CONN_Ptr conn) {
       num++;
     }
   }
-  istgt_yield();
+  sched_yield();
   sleep(1);
   if (num > max_conns + 1) {
     for (i = 0; i < g_nconns; i++) {

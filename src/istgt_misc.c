@@ -457,16 +457,6 @@ int istgt_hex2bin(uint8_t* data, size_t data_len, const char* str) {
   return total;
 }
 
-void istgt_yield(void) {
-#if defined(HAVE_PTHREAD_YIELD)
-  pthread_yield();
-#elif defined(HAVE_SCHED_YIELD)
-  sched_yield();
-#else
-  usleep(0);
-#endif
-}
-
 #ifndef HAVE_STRLCPY
 size_t strlcpy(char* dst, const char* src, size_t size) {
   size_t len;

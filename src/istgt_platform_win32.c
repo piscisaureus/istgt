@@ -276,7 +276,7 @@ void pthread_exit(void* retval) {
   _endthreadex((unsigned int) (uintptr_t) retval);
 }
 
-int pthread_yield(void) {
+int sched_yield(void) {
   Sleep(0);
   return 0;
 }

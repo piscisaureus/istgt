@@ -15,15 +15,12 @@ void istgt_platform_init(void);
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <sched.h>
 #include <sys/ioctl.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
-
-#ifdef HAVE_SCHED
-#include <sched.h>
-#endif
 
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
@@ -50,8 +47,6 @@ void istgt_platform_init(void);
 #define _CRT_SECURE_NO_WARNINGS
 #define _CRT_NONSTDC_NO_DEPRECATE
 #define _CRT_SECURE_NO_DEPRECATE
-
-#define HAVE_PTHREAD_YIELD
 
 #define WIN32_LEAN_AND_MEAN
 
@@ -130,7 +125,7 @@ int pthread_join(pthread_t thread, void** retval);
 
 pthread_t pthread_self(void);
 void pthread_exit(void* retval);
-int pthread_yield(void);
+int sched_yield(void);
 
 long int random(void);
 void srandom(unsigned int seed);

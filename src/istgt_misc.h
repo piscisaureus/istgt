@@ -170,6 +170,5 @@ int istgt_hex2bin(uint8_t* data, size_t data_len, const char* str);
 int istgt_difftime(time_t a, time_t b);
 void istgt_dump(const char* label, const uint8_t* buf, size_t len);
 void istgt_fdump(FILE* fp, const char* label, const uint8_t* buf, size_t len);
-void istgt_yield(void);
 
 #endif /* ISTGT_MISC_H */

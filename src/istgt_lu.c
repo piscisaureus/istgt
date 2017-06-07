@@ -2122,7 +2122,7 @@ retry:
         ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "reload retry for LU%d\n", lu->num);
         MTX_UNLOCK(&lu->mutex);
         MTX_UNLOCK(&istgt->mutex);
-        istgt_yield();
+        pthread_yield();
         sleep(1);
         goto retry;
       }
