@@ -16,8 +16,11 @@ foreach(MAIN_SOURCE_C ${MAIN_SOURCES_C})
 
     if(WIN32)
         target_link_libraries("${MAIN_NAME}" ws2_32)
-        set_target_properties("${MAIN_NAME}" PROPERTIES COMPILE_FLAGS "/wd4996 /wd4267 /wd4244")
     else()
         target_link_libraries("${MAIN_NAME}" pthread)
+    endif()
+
+    if (MSVC)
+        set_target_properties("${MAIN_NAME}" PROPERTIES COMPILE_FLAGS "/wd4996 /wd4267 /wd4244")
     endif()
 endforeach(MAIN_SOURCE_C ${MAIN_SOURCES_C})
