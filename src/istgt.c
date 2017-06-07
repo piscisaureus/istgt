@@ -55,8 +55,6 @@
 #define POLLWAIT 5000
 #define PORTNUMLEN 32
 
-ISTGT g_istgt;
-
 static int istgt_parse_portal(const char* portal, char** host, char** port) {
   const char* p;
   int n;
@@ -1269,8 +1267,9 @@ int main(int argc, char** argv) {
 
   istgt_platform_init();
 
-  memset(&g_istgt, 0, sizeof g_istgt);
-  istgt = &g_istgt;
+  istgt = xmalloc(sizeof *istgt);
+  memset(istgt, 0, sizeof *istgt);
+
   istgt->state = ISTGT_STATE_INVALID;
   istgt->sig_pipe = istgt_control_pipe_init();
   istgt->daemon = 0;
@@ -1381,6 +1380,7 @@ int main(int argc, char** argv) {
   istgt->config = NULL;
   istgt_free_config(config);
   istgt->state = ISTGT_STATE_SHUTDOWN;
+  xfree(istgt);
 
   return 0;
 }
