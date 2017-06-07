@@ -39,6 +39,12 @@ void istgt_platform_init(void);
 #include <linux/fs.h>
 #endif
 
+#ifdef ISTGT_USE_KQUEUE
+#include <sys/event.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#endif
+
 
 #else  // _WIN32
 /* == WINDOWS ============================================================== */

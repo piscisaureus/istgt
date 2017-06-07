@@ -52,12 +52,6 @@
 
 #include "config_file.h"
 
-#ifdef ISTGT_USE_KQUEUE
-#include <sys/event.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#endif
-
 #if !defined(__GNUC__)
 #undef __attribute__
 #define __attribute__(x)
