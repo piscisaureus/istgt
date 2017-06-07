@@ -46,15 +46,12 @@
 #include "istgt_platform.h"
 #include "istgt_proto.h"
 
-#if !defined(__GNUC__)
-#undef __attribute__
-#define __attribute__(x)
-#endif
-
-
 int istgt_lu_disk_vbox_lun_init(ISTGT_LU_DISK* spec,
-                                ISTGT_Ptr istgt __attribute__((__unused__)),
-                                ISTGT_LU_Ptr lu __attribute__((__unused__))) {
+                                ISTGT_Ptr istgt,
+                                ISTGT_LU_Ptr lu) {
+  UNUSED(istgt);
+  UNUSED(lu);
+
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
                  "LU%d: LUN%d unsupported virtual disk\n",
                  spec->num,
@@ -63,10 +60,11 @@ int istgt_lu_disk_vbox_lun_init(ISTGT_LU_DISK* spec,
 }
 
 int istgt_lu_disk_vbox_lun_shutdown(ISTGT_LU_DISK* spec,
-                                    ISTGT_Ptr istgt
-                                    __attribute__((__unused__)),
-                                    ISTGT_LU_Ptr lu
-                                    __attribute__((__unused__))) {
+                                    ISTGT_Ptr istgt,
+                                    ISTGT_LU_Ptr lu) {
+  UNUSED(istgt);
+  UNUSED(lu);
+
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
                  "LU%d: LUN%d unsupported virtual disk\n",
                  spec->num,

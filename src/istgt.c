@@ -52,11 +52,6 @@
 
 #include "config_file.h"
 
-#if !defined(__GNUC__)
-#undef __attribute__
-#define __attribute__(x)
-#endif
-
 #define POLLWAIT 5000
 #define PORTNUMLEN 32
 

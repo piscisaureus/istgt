@@ -128,6 +128,8 @@
 #define BCLR8(B, N) (BCLR8W((B), (N), 1))
 #define BGET8(B, N) (BGET8W((B), (N), 1))
 
+#define UNUSED(V) ((void) (V))
+
 /* memory allocate */
 void* xmalloc(size_t size);
 void* xrealloc(void* p, size_t size);

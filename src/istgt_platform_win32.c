@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "istgt_misc.h"
 #include "istgt_platform.h"
 
 int fsync(int fd) {
@@ -42,6 +43,7 @@ ssize_t pwrite(int fd, const void* buf, size_t count, uint64_t offset) {
 
 int pthread_mutex_init(pthread_mutex_t* mutex,
                        const pthread_mutexattr_t* attr) {
+  UNUSED(attr);
   InitializeCriticalSection(mutex);
   return 0;
 }
@@ -69,12 +71,14 @@ int pthread_mutex_unlock(pthread_mutex_t* mutex) {
 }
 
 int pthread_cond_init(pthread_cond_t* cond, const pthread_condattr_t* attr) {
+  UNUSED(attr);
   InitializeConditionVariable(cond);
   return 0;
 }
 
 int pthread_cond_destroy(pthread_cond_t* cond) {
   // Nothing to do.
+  UNUSED(cond);
   return 0;
 }
 

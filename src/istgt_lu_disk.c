@@ -53,11 +53,6 @@
 #include "istgt_scsi.h"
 #include "istgt_sock.h"
 
-#if !defined(__GNUC__)
-#undef __attribute__
-#define __attribute__(x)
-#endif
-
 #ifndef O_FSYNC
 #define O_FSYNC O_SYNC
 #endif
@@ -126,8 +121,7 @@ static const char* istgt_get_disktype_by_ext(const char* file) {
   return "RAW";
 }
 
-int istgt_lu_disk_init(ISTGT_Ptr istgt __attribute__((__unused__)),
-                       ISTGT_LU_Ptr lu) {
+int istgt_lu_disk_init(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
   ISTGT_LU_DISK* spec;
   uint64_t gb_size;
   uint64_t mb_size;
@@ -380,8 +374,7 @@ error_return:
   return -1;
 }
 
-int istgt_lu_disk_shutdown(ISTGT_Ptr istgt __attribute__((__unused__)),
-                           ISTGT_LU_Ptr lu) {
+int istgt_lu_disk_shutdown(ISTGT_Ptr istgt, ISTGT_LU_Ptr lu) {
   ISTGT_LU_DISK* spec;
   ISTGT_LU_PR_KEY* prkey;
   int rc;
@@ -627,13 +620,14 @@ int istgt_lu_set_extid(uint8_t* buf, uint64_t vid, uint64_t vide) {
 }
 
 static int istgt_lu_disk_scsi_report_luns(ISTGT_LU_Ptr lu,
-                                          CONN_Ptr conn
-                                          __attribute__((__unused__)),
-                                          uint8_t* cdb
-                                          __attribute__((__unused__)),
+                                          CONN_Ptr conn,
+                                          uint8_t* cdb,
                                           int sel,
                                           uint8_t* data,
                                           int alloc_len) {
+  UNUSED(conn);
+  UNUSED(cdb);
+
   uint64_t fmt_lun, lun, method;
   int hlen = 0, len = 0;
   int i;
@@ -1951,17 +1945,18 @@ static int istgt_lu_disk_scsi_mode_select_page(ISTGT_LU_DISK* spec,
   return 0;
 }
 
-static int istgt_lu_disk_scsi_read_defect10(ISTGT_LU_DISK* spec
-                                            __attribute__((__unused__)),
-                                            CONN_Ptr conn
-                                            __attribute__((__unused__)),
-                                            uint8_t* cdb
-                                            __attribute__((__unused__)),
+static int istgt_lu_disk_scsi_read_defect10(ISTGT_LU_DISK* spec,
+                                            CONN_Ptr conn,
+                                            uint8_t* cdb,
                                             int req_plist,
                                             int req_glist,
                                             int list_format,
                                             uint8_t* data,
                                             int alloc_len) {
+  UNUSED(spec);
+  UNUSED(conn);
+  UNUSED(cdb);
+
   uint8_t* cp;
   int hlen = 0, len = 0;
   int total;
@@ -1991,17 +1986,18 @@ static int istgt_lu_disk_scsi_read_defect10(ISTGT_LU_DISK* spec
   return total;
 }
 
-static int istgt_lu_disk_scsi_read_defect12(ISTGT_LU_DISK* spec
-                                            __attribute__((__unused__)),
-                                            CONN_Ptr conn
-                                            __attribute__((__unused__)),
-                                            uint8_t* cdb
-                                            __attribute__((__unused__)),
+static int istgt_lu_disk_scsi_read_defect12(ISTGT_LU_DISK* spec,
+                                            CONN_Ptr conn,
+                                            uint8_t* cdb,
                                             int req_plist,
                                             int req_glist,
                                             int list_format,
                                             uint8_t* data,
                                             int alloc_len) {
+  UNUSED(spec);
+  UNUSED(conn);
+  UNUSED(cdb);
+
   uint8_t* cp;
   int hlen = 0, len = 0;
   int total;
@@ -2110,12 +2106,13 @@ istgt_lu_disk_scsi_request_sense(ISTGT_LU_DISK *spec, CONN_Ptr conn, uint8_t *cd
 }
 #endif
 
-static int istgt_lu_disk_scsi_report_target_port_groups(
-    ISTGT_LU_DISK* spec,
-    CONN_Ptr conn,
-    uint8_t* cdb __attribute__((__unused__)),
-    uint8_t* data,
-    int alloc_len) {
+static int istgt_lu_disk_scsi_report_target_port_groups(ISTGT_LU_DISK* spec,
+                                                        CONN_Ptr conn,
+                                                        uint8_t* cdb,
+                                                        uint8_t* data,
+                                                        int alloc_len) {
+  UNUSED(cdb);
+
   ISTGT_Ptr istgt;
   ISTGT_LU_Ptr lu;
   uint8_t* cp;
@@ -2381,11 +2378,12 @@ static ISTGT_LU_PR_KEY* istgt_lu_disk_find_pr_key(ISTGT_LU_DISK* spec,
 }
 
 static int istgt_lu_disk_remove_other_pr_key(ISTGT_LU_DISK* spec,
-                                             CONN_Ptr conn
-                                             __attribute__((__unused__)),
+                                             CONN_Ptr conn,
                                              const char* initiator_port,
                                              const char* target_port,
                                              uint64_t key) {
+  UNUSED(conn);
+
   ISTGT_LU_PR_KEY *prkey, *prkey1, *prkey2;
   int i, j;
 
@@ -2449,11 +2447,12 @@ static int istgt_lu_disk_remove_other_pr_key(ISTGT_LU_DISK* spec,
 }
 
 static int istgt_lu_disk_remove_pr_key(ISTGT_LU_DISK* spec,
-                                       CONN_Ptr conn
-                                       __attribute__((__unused__)),
+                                       CONN_Ptr conn,
                                        const char* initiator_port,
                                        const char* target_port,
                                        uint64_t key) {
+  UNUSED(conn);
+
   ISTGT_LU_PR_KEY *prkey, *prkey1, *prkey2;
   int i, j;
 
@@ -2558,13 +2557,15 @@ static int istgt_lu_parse_transport_id(char** tid, uint8_t* data, int len) {
   return hlen + plen;
 }
 
-static int istgt_lu_disk_scsi_persistent_reserve_in(
-    ISTGT_LU_DISK* spec,
-    CONN_Ptr conn __attribute__((__unused__)),
-    ISTGT_LU_CMD_Ptr lu_cmd,
-    int sa,
-    uint8_t* data,
-    int alloc_len __attribute__((__unused__))) {
+static int istgt_lu_disk_scsi_persistent_reserve_in(ISTGT_LU_DISK* spec,
+                                                    CONN_Ptr conn,
+                                                    ISTGT_LU_CMD_Ptr lu_cmd,
+                                                    int sa,
+                                                    uint8_t* data,
+                                                    int alloc_len) {
+  UNUSED(conn);
+  UNUSED(alloc_len);
+
   ISTGT_LU_PR_KEY* prkey;
   size_t hlen = 0, len = 0, plen;
   uint8_t* sense_data;
@@ -3729,10 +3730,12 @@ static int istgt_lu_disk_scsi_reserve(ISTGT_LU_DISK* spec,
 }
 
 static int istgt_lu_disk_lbread(ISTGT_LU_DISK* spec,
-                                CONN_Ptr conn __attribute__((__unused__)),
+                                CONN_Ptr conn,
                                 ISTGT_LU_CMD_Ptr lu_cmd,
                                 uint64_t lba,
                                 uint32_t len) {
+  UNUSED(conn);
+
   uint8_t* data;
   uint64_t maxlba;
   uint64_t llen;
@@ -4095,11 +4098,13 @@ static int istgt_lu_disk_lbwrite_ats(ISTGT_LU_DISK* spec,
 }
 
 static int istgt_lu_disk_lbsync(ISTGT_LU_DISK* spec,
-                                CONN_Ptr conn __attribute__((__unused__)),
-                                ISTGT_LU_CMD_Ptr lu_cmd
-                                __attribute__((__unused__)),
+                                CONN_Ptr conn,
+                                ISTGT_LU_CMD_Ptr lu_cmd,
                                 uint64_t lba,
                                 uint32_t len) {
+  UNUSED(conn);
+  UNUSED(lu_cmd);
+
   uint64_t maxlba;
   uint64_t llen;
   uint64_t blen;
@@ -4192,12 +4197,10 @@ int istgt_lu_scsi_build_sense_data(uint8_t* data, int sk, int asc, int ascq) {
   return total;
 }
 
-static int istgt_lu_disk_build_sense_data(ISTGT_LU_DISK* spec
-                                          __attribute__((__unused__)),
-                                          uint8_t* data,
-                                          int sk,
-                                          int asc,
-                                          int ascq) {
+static int istgt_lu_disk_build_sense_data(
+    ISTGT_LU_DISK* spec, uint8_t* data, int sk, int asc, int ascq) {
+  UNUSED(spec);
+
   int rc;
 
   rc = istgt_lu_scsi_build_sense_data(data, sk, asc, ascq);
@@ -4262,14 +4265,11 @@ int istgt_lu_scsi_build_sense_data2(uint8_t* data, int sk, int asc, int ascq) {
   return total;
 }
 
-static int istgt_lu_disk_build_sense_data2(ISTGT_LU_DISK* spec
-                                           __attribute__((__unused__)),
-                                           uint8_t* data,
-                                           int sk,
-                                           int asc,
-                                           int ascq) {
-  int rc;
+static int istgt_lu_disk_build_sense_data2(
+    ISTGT_LU_DISK* spec, uint8_t* data, int sk, int asc, int ascq) {
+  UNUSED(spec);
 
+  int rc;
   rc = istgt_lu_scsi_build_sense_data2(data, sk, asc, ascq);
   if (rc < 0) {
     return -1;

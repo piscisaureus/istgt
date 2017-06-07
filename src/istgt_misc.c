@@ -44,11 +44,6 @@
 #include "istgt_misc.h"
 #include "istgt_platform.h"
 
-#if !defined(__GNUC__)
-#undef __attribute__
-#define __attribute__(x)
-#endif
-
 static void fatal(const char* format, ...)
     __attribute__((__noreturn__, __format__(__printf__, 1, 2)));
 

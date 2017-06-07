@@ -51,10 +51,6 @@
 #include "istgt_lu.h"
 #include "istgt_platform.h"
 
-#if !defined(__GNUC__)
-#undef __attribute__
-#define __attribute__(x)
-#endif
 #if defined(__GNUC__) && defined(__GNUC_MINOR__)
 #define ISTGT_GNUC_PREREQ(ma, mi) \
   (__GNUC__ > (ma) || (__GNUC__ == (ma) && __GNUC_MINOR__ >= (mi)))

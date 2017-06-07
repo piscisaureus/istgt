@@ -179,8 +179,11 @@ static int istgt_lu_disk_setcache_raw(ISTGT_LU_DISK* spec) {
 }
 
 int istgt_lu_disk_raw_lun_init(ISTGT_LU_DISK* spec,
-                               ISTGT_Ptr istgt __attribute__((__unused__)),
-                               ISTGT_LU_Ptr lu __attribute__((__unused__))) {
+                               ISTGT_Ptr istgt,
+                               ISTGT_LU_Ptr lu) {
+  UNUSED(istgt);
+  UNUSED(lu);
+
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
                  "LU%d: LUN%d unsupported virtual disk\n",
                  spec->num,
@@ -210,9 +213,10 @@ int istgt_lu_disk_raw_lun_init(ISTGT_LU_DISK* spec,
 }
 
 int istgt_lu_disk_raw_lun_shutdown(ISTGT_LU_DISK* spec,
-                                   ISTGT_Ptr istgt __attribute__((__unused__)),
-                                   ISTGT_LU_Ptr lu
-                                   __attribute__((__unused__))) {
+                                   ISTGT_Ptr istgt,
+                                   ISTGT_LU_Ptr lu) {
+  UNUSED(istgt);
+
   int rc;
   if (!spec->lu->readonly) {
     rc = spec->sync(spec, spec->size, 0);

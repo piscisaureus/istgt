@@ -57,11 +57,6 @@
 
 #include "auth_file.h"
 
-#if !defined(__GNUC__)
-#undef __attribute__
-#define __attribute__(x)
-#endif
-
 /* according to RFC1982 */
 #define SN32_CMPMAX (((uint32_t) 1U) << (32 - 1))
 #define SN32_LT(S1, S2)                                  \
@@ -5244,7 +5239,7 @@ int istgt_create_conn(ISTGT_Ptr istgt,
                       PORTAL_Ptr portal,
                       int sock,
                       struct sockaddr* sa,
-                      socklen_t salen __attribute__((__unused__))) {
+                      socklen_t salen) {
   char buf[MAX_TMPBUF];
   CONN_Ptr conn;
   int rc;
@@ -6213,7 +6208,9 @@ int istgt_iscsi_init(ISTGT_Ptr istgt) {
   return 0;
 }
 
-int istgt_iscsi_shutdown(ISTGT_Ptr istgt __attribute__((__unused__))) {
+int istgt_iscsi_shutdown(ISTGT_Ptr istgt) {
+  UNUSED(istgt);
+
   CONN_Ptr conn;
   int retry = 10;
   int num;

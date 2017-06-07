@@ -50,11 +50,6 @@
 #define AI_NUMERICSERV 0
 #endif
 
-#if !defined(__GNUC__)
-#undef __attribute__
-#define __attribute__(x)
-#endif
-
 int istgt_getaddr(int sock, char* saddr, int slen, char* caddr, int clen) {
   struct sockaddr_storage sa;
   socklen_t salen;
@@ -289,6 +284,8 @@ int istgt_set_recvlowat(int s, int nbytes) {
 
 #else   // _WIN32
   // Not supported on Windows.
+  UNUSED(s);
+  UNUSED(nbytes);
   WSASetLastError(WSAENOPROTOOPT);
   return -1;
 #endif  // _WIN32
@@ -344,21 +341,13 @@ retry:
 }
 #endif /* USE_POLLWAIT */
 
-#ifdef USE_POLLWAIT
-#define UNUSED_POLLWAIT(x) x
-#else
-#define UNUSED_POLLWAIT(x) x __attribute__((__unused__))
-#endif
-
-ssize_t istgt_read_socket(int s,
-                          void* buf,
-                          size_t nbytes,
-                          int UNUSED_POLLWAIT(timeout)) {
+ssize_t istgt_read_socket(int s, void* buf, size_t nbytes, int timeout) {
   ssize_t n;
 #ifdef USE_POLLWAIT
   int msec = POLLWAIT;
   int rc;
 #endif /* USE_POLLWAIT */
+  UNUSED(timeout);
 
   if (nbytes == 0)
     return 0;
@@ -401,12 +390,13 @@ retry:
 ssize_t istgt_write_socket(int s,
                            const void* buf,
                            size_t nbytes,
-                           int UNUSED_POLLWAIT(timeout)) {
+                           int timeout) {
   ssize_t n;
 #ifdef USE_POLLWAIT
   int msec = POLLWAIT;
   int rc;
 #endif /* USE_POLLWAIT */
+  UNUSED(timeout);
 
   if (nbytes == 0)
     return 0;
