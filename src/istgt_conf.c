@@ -368,36 +368,6 @@ static int parse_line(CONFIG* cp, char* lp) {
   return 0;
 }
 
-static char* fgets_line(FILE* fp) {
-  char *dst, *p;
-  size_t total, len;
-
-  dst = p = xmalloc(MAX_TMPBUF);
-  dst[0] = '\0';
-  total = 0;
-
-  while (fgets(p, MAX_TMPBUF, fp) != NULL) {
-    len = strlen(p);
-    total += len;
-    if (len + 1 < MAX_TMPBUF || dst[total - 1] == '\n') {
-      return xrealloc(dst, total + 1);
-    }
-    dst = xrealloc(dst, total + MAX_TMPBUF);
-    p = dst + total;
-  }
-
-  if (feof(fp) && total != 0) {
-    dst = xrealloc(dst, total + 2);
-    dst[total] = '\n';
-    dst[total + 1] = '\0';
-    return dst;
-  }
-
-  xfree(dst);
-
-  return NULL;
-}
-
 int istgt_read_config(CONFIG* cp, size_t cfgc, const char* cfgv[]) {
   char *p, *lp;
   int line;
