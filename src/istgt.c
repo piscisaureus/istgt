@@ -1245,7 +1245,7 @@ static int istgt_acceptor(ISTGT_Ptr istgt) {
         break;
       }
 
-      abort();  // Invalid command.
+      istgt_fatal("Invalid command on signal pipe");
     }
   }
 #ifdef ISTGT_USE_KQUEUE

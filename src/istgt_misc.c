@@ -44,10 +44,7 @@
 #include "istgt_misc.h"
 #include "istgt_platform.h"
 
-static void fatal(const char* format, ...)
-    __attribute__((__noreturn__, __format__(__printf__, 1, 2)));
-
-static void fatal(const char* format, ...) {
+void istgt_fatal(const char* format, ...) {
   char buf[MAX_TMPBUF];
   va_list ap;
 
@@ -65,7 +62,7 @@ void* xmalloc(size_t size) {
     size = 1;
   p = malloc(size);
   if (p == NULL)
-    fatal("no memory\n");
+    istgt_fatal("no memory\n");
   return p;
 }
 
@@ -78,7 +75,7 @@ void* xrealloc(void* p, size_t size) {
     p = realloc(p, size);
   }
   if (p == NULL)
-    fatal("no memory\n");
+    istgt_fatal("no memory\n");
   return p;
 }
 

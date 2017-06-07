@@ -143,11 +143,6 @@ typedef struct {
 
 thread_map_entry_t thread_map[MAX_THREADS] = {0};
 
-static void fatal(const char* msg) {
-  fprintf(stderr, msg);
-  abort();
-}
-
 static thread_map_entry_t* thread_map_alloc(void) {
   for (size_t i = 0; i < MAX_THREADS; i++) {
     thread_map_entry_t* entry = &thread_map[i];
@@ -157,8 +152,7 @@ static thread_map_entry_t* thread_map_alloc(void) {
       return entry;
   }
 
-  fatal("Thread table full");
-  return NULL;
+  istgt_fatal("Thread table full");
 }
 
 static thread_map_entry_t* thread_map_lookup(DWORD id) {
@@ -168,8 +162,7 @@ static thread_map_entry_t* thread_map_lookup(DWORD id) {
       return entry;
   }
 
-  fatal("Thread id not found in thread table");
-  return INVALID_HANDLE_VALUE;
+  istgt_fatal("Thread id not found in thread table");
 }
 
 static void thread_map_free(thread_map_entry_t* entry) {
@@ -177,7 +170,7 @@ static void thread_map_free(thread_map_entry_t* entry) {
     return;
 
   if (entry->state == THREAD_ENTRY_FREE)
-    fatal("Thread map entry not in use");
+    istgt_fatal("Thread map entry not in use");
 
   memset(entry, 0, sizeof *entry);
 }
@@ -241,7 +234,7 @@ int pthread_detach(pthread_t thread) {
 
   if (entry->state != THREAD_ENTRY_IN_USE &&
       entry->state != THREAD_ENTRY_EXITED)
-    fatal("Thread in unexpected state");
+    istgt_fatal("Thread in unexpected state");
 
   if (InterlockedCompareExchange(&entry->state,
                                  THREAD_ENTRY_DETACHED,
@@ -257,7 +250,7 @@ int pthread_join(pthread_t thread, void** retval) {
   thread_map_entry_t* entry = thread_map_lookup(thread);
 
   if (WaitForSingleObject(entry->handle, INFINITE) != WAIT_OBJECT_0) {
-    fatal("WaitForSingleObject failure");
+    istgt_fatal("WaitForSingleObject failure");
   }
 
   if (retval != NULL)
@@ -288,11 +281,12 @@ int sched_yield(void) {
 }
 
 long int random(void) {
-  abort();
+  istgt_fatal("not implemented");
 }
 
 void srandom(unsigned int seed) {
-  abort();
+  UNUSED(seed);
+  istgt_fatal("not implemented");
 }
 
 unsigned int sleep(unsigned int seconds) {
@@ -418,7 +412,7 @@ void istgt_platform_init(void) {
 
   WSADATA wsaData;
   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
-    fatal("WSAStartup failed");
+    istgt_fatal("WSAStartup failed");
 }
 
 #endif  // _WIN32

@@ -130,6 +130,13 @@
 
 #define UNUSED(V) ((void) (V))
 
+#ifdef _WIN32
+_declspec(noreturn)
+#else  // _WIN32
+__attribute__((__noreturn__, __format__(__printf__, 1, 2)))
+#endif
+    void istgt_fatal(const char* format, ...);
+
 /* memory allocate */
 void* xmalloc(size_t size);
 void* xrealloc(void* p, size_t size);
