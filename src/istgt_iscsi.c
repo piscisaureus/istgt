@@ -1025,8 +1025,7 @@ static int istgt_iscsi_negotiate_params(CONN_Ptr conn,
   return total;
 }
 
-static int istgt_iscsi_append_text(CONN_Ptr conn __attribute__((__unused__)),
-                                   const char* key,
+static int istgt_iscsi_append_text(const char* key,
                                    const char* val,
                                    uint8_t* data,
                                    int alloc_len,
@@ -1071,7 +1070,7 @@ static int istgt_iscsi_append_param(CONN_Ptr conn,
     }
   }
   rc = istgt_iscsi_append_text(
-      conn, param->key, param->val, data, alloc_len, data_len);
+      param->key, param->val, data, alloc_len, data_len);
   return rc;
 }
 
@@ -1234,21 +1233,19 @@ static int istgt_iscsi_auth_params(CONN_Ptr conn,
     if (new_val == NULL) {
       strlcpy(in_val, "Reject", ISCSI_TEXT_MAX_VAL_LEN);
       new_val = in_val;
-      total = istgt_iscsi_append_text(
-          conn, "CHAP_A", new_val, data, alloc_len, total);
+      total =
+          istgt_iscsi_append_text("CHAP_A", new_val, data, alloc_len, total);
       goto error_return;
     }
     /* selected algorithm is 5 (MD5) */
     ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "got CHAP_A=%s\n", new_val);
-    total = istgt_iscsi_append_text(
-        conn, "CHAP_A", new_val, data, alloc_len, total);
+    total = istgt_iscsi_append_text("CHAP_A", new_val, data, alloc_len, total);
 
     /* Identifier is one octet */
     istgt_gen_random(conn->auth.chap_id, 1);
     snprintf(
         in_val, ISCSI_TEXT_MAX_VAL_LEN, "%d", (int) conn->auth.chap_id[0]);
-    total = istgt_iscsi_append_text(
-        conn, "CHAP_I", in_val, data, alloc_len, total);
+    total = istgt_iscsi_append_text("CHAP_I", in_val, data, alloc_len, total);
 
     /* Challenge Value is a variable stream of octets */
     /* (binary length MUST not exceed 1024 bytes) */
@@ -1258,8 +1255,7 @@ static int istgt_iscsi_auth_params(CONN_Ptr conn,
                   ISCSI_TEXT_MAX_VAL_LEN,
                   conn->auth.chap_challenge,
                   conn->auth.chap_challenge_len);
-    total = istgt_iscsi_append_text(
-        conn, "CHAP_C", in_val, data, alloc_len, total);
+    total = istgt_iscsi_append_text("CHAP_C", in_val, data, alloc_len, total);
 
     conn->auth.chap_phase = ISTGT_CHAP_PHASE_WAIT_NR;
   } else if ((val = ISCSI_GETVAL(params, "CHAP_N")) != NULL) {
@@ -1369,9 +1365,9 @@ static int istgt_iscsi_auth_params(CONN_Ptr conn,
           in_val, ISCSI_TEXT_MAX_VAL_LEN, tgtmd5, ISTGT_MD5DIGEST_LEN);
 
       total = istgt_iscsi_append_text(
-          conn, "CHAP_N", conn->auth.muser, data, alloc_len, total);
-      total = istgt_iscsi_append_text(
-          conn, "CHAP_R", in_val, data, alloc_len, total);
+          "CHAP_N", conn->auth.muser, data, alloc_len, total);
+      total =
+          istgt_iscsi_append_text("CHAP_R", in_val, data, alloc_len, total);
     } else {
       /* not mutual */
       if (conn->req_mutual) {
@@ -2441,7 +2437,7 @@ static int istgt_iscsi_op_text(CONN_Ptr conn, ISCSI_PDU_Ptr pdu) {
       if (strcasecmp(val, "ALL") == 0) {
         /* not in discovery session */
         data_len = istgt_iscsi_append_text(
-            conn, "SendTargets", "Reject", data, alloc_len, data_len);
+            "SendTargets", "Reject", data, alloc_len, data_len);
       } else {
         data_len = istgt_lu_sendtargets(conn,
                                         conn->initiator_name,
