@@ -33,9 +33,6 @@
 #include <stdio.h>
 #include <time.h>
 
-#define ISTGT_USE_MACRO_EXPAND
-
-#ifdef ISTGT_USE_MACRO_EXPAND
 #define DSET8(B, D) (*((uint8_t*) (B)) = (uint8_t)(D))
 #define DSET16(B, D)                                          \
   (((*((uint8_t*) (B) + 0)) = (uint8_t)((uint16_t)(D) >> 8)), \
@@ -94,22 +91,6 @@
    (((uint64_t) * ((uint8_t*) (B) + 5)) << 16) | \
    (((uint64_t) * ((uint8_t*) (B) + 6)) << 8) |  \
    (((uint64_t) * ((uint8_t*) (B) + 7)) << 0))
-#else /* ISTGT_USE_MACRO_EXPAND */
-//#define DSET8(B,D)  (istgt_dset8((B),(D)))
-#define DSET8(B, D) (*((uint8_t*) (B)) = (uint8_t)(D))
-#define DSET16(B, D) (istgt_dset16((B), (D)))
-#define DSET24(B, D) (istgt_dset24((B), (D)))
-#define DSET32(B, D) (istgt_dset32((B), (D)))
-#define DSET48(B, D) (istgt_dset48((B), (D)))
-#define DSET64(B, D) (istgt_dset64((B), (D)))
-//#define DGET8(B)    (istgt_dget8((B)))
-#define DGET8(B) (*((uint8_t*) (B)))
-#define DGET16(B) (istgt_dget16((B)))
-#define DGET24(B) (istgt_dget24((B)))
-#define DGET32(B) (istgt_dget32((B)))
-#define DGET48(B) (istgt_dget48((B)))
-#define DGET64(B) (istgt_dget64((B)))
-#endif /* ISTGT_USE_MACRO_EXPAND */
 
 #define DMIN8(A, B) ((uint8_t)((A) > (B) ? (B) : (A)))
 #define DMIN16(A, B) ((uint16_t)((A) > (B) ? (B) : (A)))
@@ -171,20 +152,6 @@ size_t strlcpy(char* dst, const char* src, size_t size);
 /* convert from/to LBA/MSF */
 uint32_t istgt_msf2lba(uint32_t msf);
 uint32_t istgt_lba2msf(uint32_t lba);
-
-/* network byte order operation */
-uint8_t istgt_dget8(const uint8_t* data);
-void istgt_dset8(uint8_t* data, uint32_t value);
-uint16_t istgt_dget16(const uint8_t* data);
-void istgt_dset16(uint8_t* data, uint32_t value);
-uint32_t istgt_dget24(const uint8_t* data);
-void istgt_dset24(uint8_t* data, uint32_t value);
-uint32_t istgt_dget32(const uint8_t* data);
-void istgt_dset32(uint8_t* data, uint32_t value);
-uint64_t istgt_dget48(const uint8_t* data);
-void istgt_dset48(uint8_t* data, uint64_t value);
-uint64_t istgt_dget64(const uint8_t* data);
-void istgt_dset64(uint8_t* data, uint64_t value);
 
 /* random value generation */
 void istgt_gen_random(uint8_t* buf, size_t len);
