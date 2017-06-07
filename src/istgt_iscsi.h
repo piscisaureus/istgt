@@ -33,6 +33,7 @@
 #include "istgt_control_pipe.h"
 #include "istgt_iscsi_param.h"
 #include "istgt_lu.h"
+#include "istgt_misc.h"
 #include "istgt_platform.h"
 #include "istgt_queue.h"
 
@@ -342,5 +343,7 @@ typedef struct istgt_sess_t {
   uint32_t MaxCmdSN;
 } SESS;
 typedef SESS* SESS_Ptr;
+
+STATIC_ASSERT(sizeof(ISCSI_BHS) == ISCSI_BHS_LEN, "ISCSI_BHS size");
 
 #endif /* ISTGT_ISCSI_H */

@@ -1269,11 +1269,6 @@ int main(int argc, char** argv) {
 
   istgt_platform_init();
 
-  if (sizeof(ISCSI_BHS) != ISCSI_BHS_LEN) {
-    fprintf(stderr, "Internal Error\n");
-    exit(EXIT_FAILURE);
-  }
-
   memset(&g_istgt, 0, sizeof g_istgt);
   istgt = &g_istgt;
   istgt->state = ISTGT_STATE_INVALID;
