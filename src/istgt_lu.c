@@ -649,89 +649,6 @@ char* istgt_lu_get_media_flags_string(int flags, char* buf, size_t len) {
   return buf;
 }
 
-uint64_t istgt_lu_get_devsize(const char* file) {
-  uint64_t val;
-  struct stat st;
-  int fd;
-  int rc;
-
-  val = 0ULL;
-
-  rc = stat(file, &st);
-  if (rc != 0)
-    return val;
-  if (!S_ISCHR(st.st_mode) && !S_ISBLK(st.st_mode))
-    return val;
-
-  fd = open(file, O_RDONLY, 0);
-  if (fd >= 0) {
-#ifdef DIOCGMEDIASIZE
-    if (val == 0) {
-      off_t offset;
-      rc = ioctl(fd, DIOCGMEDIASIZE, &offset);
-      if (rc != -1) {
-        val = (uint64_t) offset;
-      }
-    }
-#endif /* DIOCGMEDIASIZE */
-#ifdef DIOCGDINFO
-    if (val == 0) {
-      struct disklabel dl;
-      rc = ioctl(fd, DIOCGDINFO, &dl);
-      if (rc != -1) {
-        val = (uint64_t) dl.d_secperunit;
-        val *= (uint64_t) dl.d_secsize;
-      }
-    }
-#endif /* DIOCGDINFO */
-#if defined(DKIOCGETBLOCKSIZE) && defined(DKIOCGETBLOCKCOUNT)
-    if (val == 0) {
-      uint32_t blocklen;
-      uint64_t blockcnt;
-      rc = ioctl(fd, DKIOCGETBLOCKSIZE, &blocklen);
-      if (rc != -1) {
-        rc = ioctl(fd, DKIOCGETBLOCKCOUNT, &blockcnt);
-        if (rc != -1) {
-          val = (uint64_t) blocklen;
-          val *= (uint64_t) blockcnt;
-        }
-      }
-    }
-#endif /* DKIOCGETBLOCKSIZE && DKIOCGETBLOCKCOUNT */
-#ifdef __linux__
-#ifdef BLKGETSIZE64
-    if (val == 0) {
-      uint64_t blocksize;
-      rc = ioctl(fd, BLKGETSIZE64, &blocksize);
-      if (rc != -1) {
-        val = (uint64_t) blocksize;
-      }
-    }
-#endif /* BLKGETSIZE64 */
-#ifdef BLKGETSIZE
-    if (val == 0) {
-      uint32_t blocksize;
-      rc = ioctl(fd, BLKGETSIZE, &blocksize);
-      if (rc != -1) {
-        val = (uint64_t) 512;
-        val *= (uint64_t) blocksize;
-      }
-    }
-#endif /* BLKGETSIZE */
-#endif /* __linux__ */
-    if (val == 0) {
-      ISTGT_ERRLOG("unknown device size\n");
-    }
-    (void) close(fd);
-  } else {
-    if (g_trace_flag) {
-      ISTGT_WARNLOG("open error %s (errno=%d)\n", file, errno);
-    }
-    val = 0ULL;
-  }
-  return val;
-}
-
 uint64_t istgt_lu_get_filesize(const char* file) {
   uint64_t val;
   struct stat st;
@@ -741,19 +658,9 @@ uint64_t istgt_lu_get_filesize(const char* file) {
 
   rc = stat(file, &st);
   if (rc < 0)
-    return val;
+    return 0;
 
-  if (S_ISCHR(st.st_mode)) {
-    val = istgt_lu_get_devsize(file);
-  } else if (S_ISBLK(st.st_mode)) {
-    val = istgt_lu_get_devsize(file);
-  } else if (S_ISREG(st.st_mode)) {
-    val = st.st_size;
-  } else {
-    ISTGT_ERRLOG("stat is neither REG, CHR nor BLK\n");
-    val = 0ULL;
-  }
-  return val;
+  return st.st_size;
 }
 
 uint64_t istgt_lu_parse_size(const char* size) {
