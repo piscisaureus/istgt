@@ -22,5 +22,7 @@ foreach(MAIN_SOURCE_C ${MAIN_SOURCES_C})
 
     if (MSVC)
         set_target_properties("${MAIN_NAME}" PROPERTIES COMPILE_FLAGS "/Wall /wd4201 /wd4206 /wd4267 /wd4242 /wd4310 /wd4244 /wd4820 /wd4996 /wd4710 /wd4255")
+    else()
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-but-set-variable")
     endif()
 endforeach(MAIN_SOURCE_C ${MAIN_SOURCES_C})
