@@ -41,7 +41,7 @@ int istgt_control_pipe_create(istgt_control_pipe_t* control_pipe) {
   control_pipe->fd[0] = -1;
   control_pipe->fd[1] = -1;
 
-  if (socketpair(AF_INET, SOCK_STREAM, IPPROTO_IP, control_pipe->fd) ==
+  if (socketpair(AF_INET, SOCK_STREAM, IPPROTO_TCP, control_pipe->fd) ==
       SOCKET_ERROR)
     return -1;
 

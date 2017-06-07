@@ -176,19 +176,14 @@ typedef enum {
 
 typedef struct istgt_t {
   CONFIG* config;
-  CONFIG* config_old;
   char* nodebase;
 
   pthread_mutex_t mutex;
   pthread_mutex_t state_mutex;
-  pthread_mutex_t reload_mutex;
-  pthread_cond_t reload_cond;
 
   ISTGT_STATE state;
-  uint32_t generation;
   istgt_control_pipe_t sig_pipe;
   int daemon;
-  int pg_reload;
 
   int nportal_group;
   PORTAL_GROUP portal_group[MAX_PORTAL_GROUP];

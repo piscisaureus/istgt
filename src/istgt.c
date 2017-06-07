@@ -263,233 +263,6 @@ static int istgt_add_portal_group(ISTGT_Ptr istgt,
   return 0;
 }
 
-static int istgt_pg_match_all(PORTAL_GROUP* pgp, CF_SECTION* sp) {
-  char *label, *portal, *host, *port;
-  int rc;
-  int i;
-
-  for (i = 0; i < pgp->nportals; i++) {
-    label = istgt_get_nmval(sp, "Portal", i, 0);
-    portal = istgt_get_nmval(sp, "Portal", i, 1);
-    if (label == NULL || portal == NULL)
-      return 0;
-    rc = istgt_parse_portal(portal, &host, &port);
-    if (rc < 0)
-      return 0;
-    if (strcmp(pgp->portals[i]->label, label) != 0)
-      return 0;
-    if (strcmp(pgp->portals[i]->host, host) != 0)
-      return 0;
-    if (strcmp(pgp->portals[i]->port, port) != 0)
-      return 0;
-  }
-  label = istgt_get_nmval(sp, "Portal", i, 0);
-  portal = istgt_get_nmval(sp, "Portal", i, 1);
-  if (label != NULL || portal != NULL)
-    return 0;
-  return 1;
-}
-
-static int istgt_update_portal_group(ISTGT_Ptr istgt,
-                                     CF_SECTION* sp,
-                                     int* pgp_idx) {
-  const char* val;
-  char *label, *portal, *host, *port;
-  int alloc_len;
-  int idx, free_idx;
-  int portals;
-  int rc;
-  int i;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "update portal group %d\n", sp->num);
-
-  val = istgt_get_val(sp, "Comment");
-  if (val != NULL) {
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "Comment %s\n", val);
-  }
-
-  /* counts number of definition */
-  for (i = 0;; i++) {
-    label = istgt_get_nmval(sp, "Portal", i, 0);
-    portal = istgt_get_nmval(sp, "Portal", i, 1);
-    if (label == NULL || portal == NULL)
-      break;
-    rc = istgt_parse_portal(portal, NULL, NULL);
-    if (rc < 0) {
-      ISTGT_ERRLOG("parse portal error (%s)\n", portal);
-      return -1;
-    }
-  }
-  portals = i;
-  if (portals > MAX_PORTAL) {
-    ISTGT_ERRLOG("%d > MAX_PORTAL\n", portals);
-    return -1;
-  }
-
-  MTX_LOCK(&istgt->mutex);
-  idx = -1;
-  for (i = 0; i < istgt->nportal_group; i++) {
-    if (istgt->portal_group[i].tag == sp->num) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx < 0) {
-    MTX_UNLOCK(&istgt->mutex);
-    ISTGT_ERRLOG("can't find PG%d\n", sp->num);
-    return -1;
-  }
-  if (istgt_pg_match_all(&istgt->portal_group[i], sp)) {
-    MTX_UNLOCK(&istgt->mutex);
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "skip for PG%d\n", sp->num);
-    return 0;
-  }
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                 "Index=%d, Tag=%d, Portals=%d\n",
-                 idx,
-                 sp->num,
-                 portals);
-  if (istgt->portal_group[idx].nportals == portals) {
-    /* udpate PG */
-    for (i = 0; i < portals; i++) {
-      label = istgt_get_nmval(sp, "Portal", i, 0);
-      portal = istgt_get_nmval(sp, "Portal", i, 1);
-      if (label == NULL || portal == NULL) {
-        xfree(istgt->portal_group[idx].portals);
-        istgt->portal_group[idx].nportals = 0;
-        istgt->portal_group[idx].tag = 0;
-        MTX_UNLOCK(&istgt->mutex);
-        ISTGT_ERRLOG("portal error\n");
-        return -1;
-      }
-      rc = istgt_parse_portal(portal, &host, &port);
-      if (rc < 0) {
-        xfree(istgt->portal_group[idx].portals);
-        istgt->portal_group[idx].nportals = 0;
-        istgt->portal_group[idx].tag = 0;
-        MTX_UNLOCK(&istgt->mutex);
-        ISTGT_ERRLOG("parse portal error (%s)\n", portal);
-        return -1;
-      }
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                     "RIndex=%d, Host=%s, Port=%s, Tag=%d\n",
-                     i,
-                     host,
-                     port,
-                     sp->num);
-
-      /* free old PG */
-      xfree(istgt->portal_group[idx].portals[i]->label);
-      xfree(istgt->portal_group[idx].portals[i]->host);
-      xfree(istgt->portal_group[idx].portals[i]->port);
-
-      /* allocate new PG */
-      istgt->portal_group[idx].portals[i]->label = xstrdup(label);
-      istgt->portal_group[idx].portals[i]->host = host;
-      istgt->portal_group[idx].portals[i]->port = port;
-      // istgt->portal_group[idx].portals[i]->ref = 0;
-      // istgt->portal_group[idx].portals[i]->idx = i;
-      // istgt->portal_group[idx].portals[i]->tag = sp->num;
-      // istgt->portal_group[idx].portals[i]->sock = -1;
-    }
-    if (pgp_idx != NULL)
-      *pgp_idx = idx;
-  } else {
-    /* mark as free */
-    istgt->portal_group[*pgp_idx].tag = 0;
-
-    /* allocate new PG */
-    idx = istgt->nportal_group;
-    free_idx = -1;
-    for (i = 0; i < istgt->nportal_group; i++) {
-      if (istgt->portal_group[i].tag != 0)
-        continue;
-      if (istgt->portal_group[i].nportals == portals) {
-        free_idx = i;
-        break;
-      }
-    }
-    if (free_idx >= 0)
-      idx = free_idx;
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                   "Index=%d, Tag=%d, Portals=%d -> %d\n",
-                   idx,
-                   sp->num,
-                   istgt->portal_group[*pgp_idx].nportals,
-                   portals);
-    if (idx < MAX_PORTAL_GROUP) {
-      if (free_idx < 0) {
-        istgt->portal_group[idx].nportals = portals;
-        alloc_len = sizeof(PORTAL*) * portals;
-        istgt->portal_group[idx].portals = xmalloc(alloc_len);
-      }
-      istgt->portal_group[idx].ref = istgt->portal_group[*pgp_idx].ref;
-      istgt->portal_group[idx].idx = idx;
-      istgt->portal_group[idx].tag = sp->num;
-
-      for (i = 0; i < portals; i++) {
-        label = istgt_get_nmval(sp, "Portal", i, 0);
-        portal = istgt_get_nmval(sp, "Portal", i, 1);
-        if (label == NULL || portal == NULL) {
-          if (free_idx < 0) {
-            xfree(istgt->portal_group[idx].portals);
-            istgt->portal_group[idx].nportals = 0;
-          }
-          istgt->portal_group[idx].tag = 0;
-          MTX_UNLOCK(&istgt->mutex);
-          ISTGT_ERRLOG("portal error\n");
-          return -1;
-        }
-        rc = istgt_parse_portal(portal, &host, &port);
-        if (rc < 0) {
-          if (free_idx < 0) {
-            xfree(istgt->portal_group[idx].portals);
-            istgt->portal_group[idx].nportals = 0;
-          }
-          istgt->portal_group[idx].tag = 0;
-          MTX_UNLOCK(&istgt->mutex);
-          ISTGT_ERRLOG("parse portal error (%s)\n", portal);
-          return -1;
-        }
-        ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                       "RIndex=%d, Host=%s, Port=%s, Tag=%d\n",
-                       i,
-                       host,
-                       port,
-                       sp->num);
-
-        if (free_idx < 0) {
-          istgt->portal_group[idx].portals[i] = xmalloc(sizeof(PORTAL));
-        } else {
-          xfree(istgt->portal_group[idx].portals[i]->label);
-          xfree(istgt->portal_group[idx].portals[i]->host);
-          xfree(istgt->portal_group[idx].portals[i]->port);
-        }
-        istgt->portal_group[idx].portals[i]->label = xstrdup(label);
-        istgt->portal_group[idx].portals[i]->host = host;
-        istgt->portal_group[idx].portals[i]->port = port;
-        istgt->portal_group[idx].portals[i]->ref = 0;
-        istgt->portal_group[idx].portals[i]->idx = i;
-        istgt->portal_group[idx].portals[i]->tag = sp->num;
-        istgt->portal_group[idx].portals[i]->sock = -1;
-      }
-
-      if (pgp_idx != NULL)
-        *pgp_idx = idx;
-      if (free_idx < 0) {
-        idx++;
-        istgt->nportal_group = idx;
-      }
-    } else {
-      MTX_UNLOCK(&istgt->mutex);
-      ISTGT_ERRLOG("nportal_group(%d) >= MAX_PORTAL_GROUP\n", idx);
-      return -1;
-    }
-  }
-  MTX_UNLOCK(&istgt->mutex);
-  return 1;
-}
-
 static int istgt_build_portal_group_array(ISTGT_Ptr istgt) {
   CF_SECTION* sp;
   int rc;
@@ -687,131 +460,6 @@ static int istgt_add_initiator_group(ISTGT_Ptr istgt, CF_SECTION* sp) {
   }
   MTX_UNLOCK(&istgt->mutex);
   return 0;
-}
-
-static int istgt_ig_match_all(INITIATOR_GROUP* igp, CF_SECTION* sp) {
-  const char* val;
-  int i;
-
-  for (i = 0; i < igp->ninitiators; i++) {
-    val = istgt_get_nval(sp, "InitiatorName", i);
-    if (val == NULL)
-      return 0;
-    if (strcmp(igp->initiators[i], val) != 0)
-      return 0;
-  }
-  val = istgt_get_nval(sp, "InitiatorName", i);
-  if (val != NULL)
-    return 0;
-  for (i = 0; i < igp->nnetmasks; i++) {
-    val = istgt_get_nval(sp, "Netmask", i);
-    if (val == NULL)
-      return 0;
-    if (strcmp(igp->netmasks[i], val) != 0)
-      return 0;
-  }
-  val = istgt_get_nval(sp, "Netmask", i);
-  if (val != NULL)
-    return 0;
-  return 1;
-}
-
-static int istgt_update_initiator_group(ISTGT_Ptr istgt, CF_SECTION* sp) {
-  const char* val;
-  int alloc_len;
-  int idx;
-  int names;
-  int masks;
-  int i;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "update initiator group %d\n", sp->num);
-
-  val = istgt_get_val(sp, "Comment");
-  if (val != NULL) {
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "Comment %s\n", val);
-  }
-
-  /* counts number of definition */
-  for (i = 0;; i++) {
-    val = istgt_get_nval(sp, "InitiatorName", i);
-    if (val == NULL)
-      break;
-  }
-  names = i;
-  if (names > MAX_INITIATOR) {
-    ISTGT_ERRLOG("%d > MAX_INITIATOR\n", names);
-    return -1;
-  }
-  for (i = 0;; i++) {
-    val = istgt_get_nval(sp, "Netmask", i);
-    if (val == NULL)
-      break;
-  }
-  masks = i;
-  if (masks > MAX_NETMASK) {
-    ISTGT_ERRLOG("%d > MAX_NETMASK\n", masks);
-    return -1;
-  }
-
-  MTX_LOCK(&istgt->mutex);
-  idx = -1;
-  for (i = 0; i < istgt->ninitiator_group; i++) {
-    if (istgt->initiator_group[i].tag == sp->num) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx < 0) {
-    MTX_UNLOCK(&istgt->mutex);
-    ISTGT_ERRLOG("can't find IG%d\n", sp->num);
-    return -1;
-  }
-  if (istgt_ig_match_all(&istgt->initiator_group[i], sp)) {
-    MTX_UNLOCK(&istgt->mutex);
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "skip for IG%d\n", sp->num);
-    return 0;
-  }
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                 "Index=%d, Tag=%d, Names=%d, Masks=%d\n",
-                 idx,
-                 sp->num,
-                 names,
-                 masks);
-
-  /* free old IG */
-  for (i = 0; i < istgt->initiator_group[idx].ninitiators; i++) {
-    xfree(istgt->initiator_group[idx].initiators[i]);
-  }
-  xfree(istgt->initiator_group[idx].initiators);
-  for (i = 0; i < istgt->initiator_group[idx].nnetmasks; i++) {
-    xfree(istgt->initiator_group[idx].netmasks[i]);
-  }
-  xfree(istgt->initiator_group[idx].netmasks);
-
-  /* allocate new IG */
-  istgt->initiator_group[idx].ninitiators = names;
-  alloc_len = sizeof(char*) * names;
-  istgt->initiator_group[idx].initiators = xmalloc(alloc_len);
-  istgt->initiator_group[idx].nnetmasks = masks;
-  alloc_len = sizeof(char*) * masks;
-  istgt->initiator_group[idx].netmasks = xmalloc(alloc_len);
-  // istgt->initiator_group[idx].ref = 0;
-  // istgt->initiator_group[idx].idx = idx;
-  // istgt->initiator_group[idx].tag = sp->num;
-
-  /* copy new strings */
-  for (i = 0; i < names; i++) {
-    val = istgt_get_nval(sp, "InitiatorName", i);
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "InitiatorName %s\n", val);
-    istgt->initiator_group[idx].initiators[i] = xstrdup(val);
-  }
-  for (i = 0; i < masks; i++) {
-    val = istgt_get_nval(sp, "Netmask", i);
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "Netmask %s\n", val);
-    istgt->initiator_group[idx].netmasks[i] = xstrdup(val);
-  }
-  MTX_UNLOCK(&istgt->mutex);
-  return 1;
 }
 
 static int istgt_build_initiator_group_array(ISTGT_Ptr istgt) {
@@ -1300,16 +948,6 @@ static int istgt_init(ISTGT_Ptr istgt) {
     ISTGT_ERRLOG("mutex_init() failed\n");
     return -1;
   }
-  rc = pthread_mutex_init(&istgt->reload_mutex, NULL);
-  if (rc != 0) {
-    ISTGT_ERRLOG("mutex_init() failed\n");
-    return -1;
-  }
-  rc = pthread_cond_init(&istgt->reload_cond, NULL);
-  if (rc != 0) {
-    ISTGT_ERRLOG("cond_init() failed\n");
-    return -1;
-  }
 
   rc = istgt_control_pipe_create(&istgt->sig_pipe);
   if (rc != 0) {
@@ -1333,324 +971,21 @@ static void istgt_shutdown(ISTGT_Ptr istgt) {
 
   xfree(istgt->nodebase);
 
-  (void) pthread_cond_destroy(&istgt->reload_cond);
-  (void) pthread_mutex_destroy(&istgt->reload_mutex);
   (void) pthread_mutex_destroy(&istgt->state_mutex);
   (void) pthread_mutex_destroy(&istgt->mutex);
 }
 
-static int istgt_pg_exist_num(CONFIG* config, int num) {
-  CF_SECTION* sp;
-
-  sp = config->section;
-  while (sp != NULL) {
-    if (sp->type == ST_PORTALGROUP) {
-      if (sp->num == num) {
-        return 1;
-      }
-    }
-    sp = sp->next;
-  }
-  return -1;
-}
-
-static PORTAL_GROUP* istgt_get_tag_portal(ISTGT_Ptr istgt, int tag) {
-  int i;
-
-  if (tag == 0)
-    return NULL;
-  MTX_LOCK(&istgt->mutex);
-  for (i = 0; i < istgt->nportal_group; i++) {
-    if (istgt->portal_group[i].tag == tag) {
-      MTX_UNLOCK(&istgt->mutex);
-      return &istgt->portal_group[i];
-    }
-  }
-  MTX_UNLOCK(&istgt->mutex);
-  return NULL;
-}
-
-#if 0
-static int
-istgt_get_num_of_portals(CF_SECTION *sp)
-{
-	char *label, *portal;
-	int portals;
-	int rc;
-	int i;
-
-	for (i = 0; ; i++) {
-		label = istgt_get_nmval(sp, "Portal", i, 0);
-		portal = istgt_get_nmval(sp, "Portal", i, 1);
-		if (label == NULL || portal == NULL)
-			break;
-		rc = istgt_parse_portal(portal, NULL, NULL);
-		if (rc < 0) {
-			ISTGT_ERRLOG("parse portal error (%s)\n", portal);
-			return -1;
-		}
-	}
-	portals = i;
-	if (portals > MAX_PORTAL) {
-		ISTGT_ERRLOG("%d > MAX_PORTAL\n", portals);
-		return -1;
-	}
-	return portals;
-}
-#endif
-
-#define RELOAD_CMD_LENGTH 5
-static int istgt_pg_reload_delete(ISTGT_Ptr istgt) {
-  char tmp[RELOAD_CMD_LENGTH];
-  int rc;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_pg_reload_delete\n");
-
-  istgt->pg_reload = 0;
-  /* request delete */
-  tmp[0] = 'D';
-  DSET32(&tmp[1], 0);
-  rc = istgt_control_pipe_write(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
-  if (rc < 0 || rc != RELOAD_CMD_LENGTH) {
-    ISTGT_ERRLOG("write() failed\n");
-    return -1;
-  }
-  /* wait for completion */
-  MTX_LOCK(&istgt->reload_mutex);
-  while (istgt->pg_reload == 0) {
-    pthread_cond_wait(&istgt->reload_cond, &istgt->reload_mutex);
-  }
-  rc = istgt->pg_reload;
-  MTX_UNLOCK(&istgt->reload_mutex);
-  if (rc < 0) {
-    if (istgt_get_state(istgt) != ISTGT_STATE_RUNNING) {
-      ISTGT_WARNLOG("pg_reload abort\n");
-      return -1;
-    }
-  }
-  return 0;
-}
-
-static int istgt_pg_reload_update(ISTGT_Ptr istgt) {
-  char tmp[RELOAD_CMD_LENGTH];
-  int rc;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_pg_reload_update\n");
-
-  istgt->pg_reload = 0;
-  /* request update */
-  tmp[0] = 'U';
-  DSET32(&tmp[1], 0);
-  rc = istgt_control_pipe_write(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
-  if (rc < 0 || rc != RELOAD_CMD_LENGTH) {
-    ISTGT_ERRLOG("write() failed\n");
-    return -1;
-  }
-  /* wait for completion */
-  MTX_LOCK(&istgt->reload_mutex);
-  while (istgt->pg_reload == 0) {
-    pthread_cond_wait(&istgt->reload_cond, &istgt->reload_mutex);
-  }
-  rc = istgt->pg_reload;
-  MTX_UNLOCK(&istgt->reload_mutex);
-  if (rc < 0) {
-    if (istgt_get_state(istgt) != ISTGT_STATE_RUNNING) {
-      ISTGT_WARNLOG("pg_reload abort\n");
-      return -1;
-    }
-  }
-  return 0;
-}
-
-static int istgt_ig_exist_num(CONFIG* config, int num) {
-  CF_SECTION* sp;
-
-  sp = config->section;
-  while (sp != NULL) {
-    if (sp->type == ST_INITIATORGROUP) {
-      if (sp->num == num) {
-        return 1;
-      }
-    }
-    sp = sp->next;
-  }
-  return -1;
-}
-
-static int istgt_ig_reload_delete(ISTGT_Ptr istgt) {
-  INITIATOR_GROUP* igp;
-  int rc;
-  int i, j;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_ig_reload_delete\n");
-  MTX_LOCK(&istgt->mutex);
-  for (i = 0; i < istgt->ninitiator_group; i++) {
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                   "IG reload idx=%d, (%d)\n",
-                   i,
-                   istgt->ninitiator_group);
-    igp = &istgt->initiator_group[i];
-    rc = istgt_ig_exist_num(istgt->config, igp->tag);
-    if (rc < 0) {
-      if (igp->ref != 0) {
-        ISTGT_ERRLOG("delete request for referenced IG%d\n", igp->tag);
-      } else {
-        ISTGT_NOTICELOG("delete IG%d\n", igp->tag);
-        /* free old IG */
-        for (j = 0; j < istgt->initiator_group[i].ninitiators; j++) {
-          xfree(istgt->initiator_group[i].initiators[j]);
-        }
-        xfree(istgt->initiator_group[i].initiators);
-        for (j = 0; j < istgt->initiator_group[i].nnetmasks; j++) {
-          xfree(istgt->initiator_group[i].netmasks[j]);
-        }
-        xfree(istgt->initiator_group[i].netmasks);
-
-        /* move from beyond the IG */
-        for (j = i; j < istgt->ninitiator_group - 1; j++) {
-          istgt->initiator_group[j].ninitiators =
-              istgt->initiator_group[j + 1].ninitiators;
-          istgt->initiator_group[j].initiators =
-              istgt->initiator_group[j + 1].initiators;
-          istgt->initiator_group[j].nnetmasks =
-              istgt->initiator_group[j + 1].nnetmasks;
-          istgt->initiator_group[j].netmasks =
-              istgt->initiator_group[j + 1].netmasks;
-          istgt->initiator_group[j].ref = istgt->initiator_group[j + 1].ref;
-          istgt->initiator_group[j].idx = istgt->initiator_group[j + 1].idx;
-          istgt->initiator_group[j].tag = istgt->initiator_group[j + 1].tag;
-        }
-        istgt->ninitiator_group--;
-      }
-    }
-  }
-  MTX_UNLOCK(&istgt->mutex);
-  return 0;
-}
-
-static int istgt_ig_reload_update(ISTGT_Ptr istgt) {
-  CF_SECTION* sp;
-  int rc;
-  int i;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_ig_reload_update\n");
-  sp = istgt->config->section;
-  while (sp != NULL) {
-    if (sp->type == ST_INITIATORGROUP) {
-      if (sp->num == 0) {
-        ISTGT_ERRLOG("Group 0 is invalid\n");
-        goto skip_ig;
-      }
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "IG reload tag=%d\n", sp->num);
-#if 0
-			rc = istgt_ig_exist_num(istgt->config_old, sp->num);
-#else
-      rc = -1;
-      MTX_LOCK(&istgt->mutex);
-      for (i = 0; i < istgt->ninitiator_group; i++) {
-        if (istgt->initiator_group[i].tag == sp->num) {
-          rc = 1;
-          break;
-        }
-      }
-      MTX_UNLOCK(&istgt->mutex);
-#endif
-      if (rc < 0) {
-        rc = istgt_add_initiator_group(istgt, sp);
-        if (rc < 0) {
-          ISTGT_ERRLOG("add_initiator_group() failed\n");
-          goto skip_ig;
-        }
-        ISTGT_NOTICELOG("add IG%d\n", sp->num);
-      } else {
-        rc = istgt_update_initiator_group(istgt, sp);
-        if (rc < 0) {
-          ISTGT_ERRLOG("update_initiator_group() failed\n");
-          goto skip_ig;
-        } else if (rc == 0) {
-          // not modified
-        } else if (rc > 0) {
-          ISTGT_NOTICELOG("update IG%d\n", sp->num);
-        }
-      }
-    }
-  skip_ig:
-    sp = sp->next;
-  }
-  return 0;
-}
-
-static int istgt_reload(ISTGT_Ptr istgt) {
-  CONFIG *config_new, *config_old;
-  int rc;
-
-  ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_reload\n");
-  /* prepare config structure */
-  config_new = istgt_allocate_config();
-  config_old = istgt->config;
-  rc = istgt_read_config(
-      config_new, sizeof CONFIG_FILE / sizeof CONFIG_FILE[0], CONFIG_FILE);
-  if (rc < 0) {
-    ISTGT_ERRLOG("config error\n");
-    return -1;
-  }
-  if (config_new->section == NULL) {
-    ISTGT_ERRLOG("empty config\n");
-    istgt_free_config(config_new);
-    return -1;
-  }
-  istgt->config = config_new;
-  istgt->config_old = config_old;
-  istgt->generation++;
-
-  /* reload sub groups */
-  ISTGT_NOTICELOG("reload configuration #%" PRIu32 "\n", istgt->generation);
-  rc = istgt_lu_reload_delete(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("LU reload del error\n");
-    return -1;
-  }
-  rc = istgt_ig_reload_delete(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("IG reload del error\n");
-    return -1;
-  }
-  rc = istgt_pg_reload_delete(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("PG reload del error\n");
-    return -1;
-  }
-
-  rc = istgt_pg_reload_update(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("PG reload add error\n");
-    return -1;
-  }
-  rc = istgt_ig_reload_update(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("IG reload add error\n");
-    return -1;
-  }
-  rc = istgt_lu_reload_update(istgt);
-  if (rc < 0) {
-    ISTGT_ERRLOG("LU reload add error\n");
-    return -1;
-  }
-
-  istgt->config_old = NULL;
-  istgt_free_config(config_old);
-  return 0;
-}
+#define SIG_PIPE_CMD_LENGTH 5
 
 static int istgt_stop_loop(ISTGT_Ptr istgt) {
-  char tmp[RELOAD_CMD_LENGTH];
+  char tmp[SIG_PIPE_CMD_LENGTH];
   int rc;
 
   ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "istgt_stop_loop\n");
   tmp[0] = 'E';
   DSET32(&tmp[1], 0);
-  rc = istgt_control_pipe_write(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
-  if (rc < 0 || rc != RELOAD_CMD_LENGTH) {
+  rc = istgt_control_pipe_write(&istgt->sig_pipe, tmp, SIG_PIPE_CMD_LENGTH);
+  if (rc < 0 || rc != SIG_PIPE_CMD_LENGTH) {
     ISTGT_ERRLOG("write() failed\n");
     /* ignore error */
   }
@@ -1673,111 +1008,6 @@ static PORTAL* istgt_get_sock_portal(ISTGT_Ptr istgt, int sock) {
   }
   MTX_UNLOCK(&istgt->mutex);
   return NULL;
-}
-
-static int istgt_pg_delete(ISTGT_Ptr istgt) {
-  PORTAL_GROUP* pgp;
-  int rc;
-  int i;
-
-  MTX_LOCK(&istgt->mutex);
-  for (i = 0; i < istgt->nportal_group; i++) {
-    pgp = &istgt->portal_group[i];
-    if (pgp->tag == 0)
-      continue;
-    ISTGT_TRACELOG(ISTGT_TRACE_DEBUG,
-                   "PG reload idx=%d, tag=%d, (%d)\n",
-                   i,
-                   pgp->tag,
-                   istgt->nportal_group);
-    rc = istgt_pg_exist_num(istgt->config, pgp->tag);
-    if (rc < 0) {
-      if (pgp->ref != 0) {
-        ISTGT_ERRLOG("delete request for referenced PG%d\n", pgp->tag);
-      } else {
-        ISTGT_NOTICELOG("delete PG%d\n", pgp->tag);
-        pgp->tag = 0;
-        (void) istgt_close_portal_group(pgp);
-      }
-    }
-  }
-  MTX_UNLOCK(&istgt->mutex);
-  return 0;
-}
-
-static int istgt_pg_update(ISTGT_Ptr istgt) {
-  PORTAL_GROUP* pgp;
-  CF_SECTION* sp;
-  int pgp_idx;
-  int rc;
-  int i;
-
-  sp = istgt->config->section;
-  while (sp != NULL) {
-    if (sp->type == ST_PORTALGROUP) {
-      if (sp->num == 0) {
-        ISTGT_ERRLOG("Group 0 is invalid\n");
-        goto skip_pg;
-      }
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "PG reload tag=%d\n", sp->num);
-#if 0
-			rc = istgt_pg_exist_num(istgt->config_old, sp->num);
-#else
-      rc = -1;
-      MTX_LOCK(&istgt->mutex);
-      for (i = 0; i < istgt->nportal_group; i++) {
-        if (istgt->portal_group[i].tag == sp->num) {
-          rc = 1;
-          break;
-        }
-      }
-      MTX_UNLOCK(&istgt->mutex);
-#endif
-      if (rc < 0) {
-        rc = istgt_add_portal_group(istgt, sp, &pgp_idx);
-        if (rc < 0) {
-          ISTGT_ERRLOG("add_portal_group() failed\n");
-          goto skip_pg;
-        }
-        MTX_LOCK(&istgt->mutex);
-        pgp = &istgt->portal_group[pgp_idx];
-        (void) istgt_open_portal_group(pgp);
-        MTX_UNLOCK(&istgt->mutex);
-        ISTGT_NOTICELOG("add PG%d\n", sp->num);
-      } else {
-        // portals = istgt_get_num_of_portals(sp);
-        pgp = istgt_get_tag_portal(istgt, sp->num);
-        if (istgt_pg_match_all(pgp, sp)) {
-          ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "skip for PG%d\n", sp->num);
-        } else if (pgp->ref != 0) {
-          ISTGT_ERRLOG("update request for referenced PG%d\n", pgp->tag);
-        } else {
-          /* delete old sock */
-          MTX_LOCK(&istgt->mutex);
-          pgp_idx = pgp->idx;
-          (void) istgt_close_portal_group(pgp);
-          MTX_UNLOCK(&istgt->mutex);
-          rc = istgt_update_portal_group(istgt, sp, &pgp_idx);
-          if (rc < 0) {
-            ISTGT_ERRLOG("update_portal_group() failed\n");
-            goto skip_pg;
-          } else if (rc == 0) {
-            // not modified
-          } else if (rc > 0) {
-            /* add new sock */
-            MTX_LOCK(&istgt->mutex);
-            pgp = &istgt->portal_group[pgp_idx];
-            (void) istgt_open_portal_group(pgp);
-            MTX_UNLOCK(&istgt->mutex);
-            ISTGT_NOTICELOG("update PG%d\n", sp->num);
-          }
-        }
-      }
-    }
-  skip_pg:
-    sp = sp->next;
-  }
-  return 0;
 }
 
 static int istgt_acceptor(ISTGT_Ptr istgt) {
@@ -1805,7 +1035,6 @@ static int istgt_acceptor(ISTGT_Ptr istgt) {
   /* now running main thread */
   istgt_set_state(istgt, ISTGT_STATE_RUNNING);
 
-reload:
   nidx = 0;
 #ifdef ISTGT_USE_KQUEUE
   kq = kqueue();
@@ -2012,12 +1241,11 @@ reload:
     }
     if (fds[spidx].revents & POLLIN) {
 #endif /* ISTGT_USE_KQUEUE */
-      char tmp[RELOAD_CMD_LENGTH];
+      char tmp[SIG_PIPE_CMD_LENGTH];
       // int pgp_idx;
-      int rc2;
 
-      rc = istgt_control_pipe_read(&istgt->sig_pipe, tmp, RELOAD_CMD_LENGTH);
-      if (rc < 0 || rc == 0 || rc != RELOAD_CMD_LENGTH) {
+      rc = istgt_control_pipe_read(&istgt->sig_pipe, tmp, SIG_PIPE_CMD_LENGTH);
+      if (rc < 0 || rc == 0 || rc != SIG_PIPE_CMD_LENGTH) {
         ISTGT_ERRLOG("read() failed\n");
         break;
       }
@@ -2027,39 +1255,8 @@ reload:
         ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "exit request (main loop)\n");
         break;
       }
-      if (tmp[0] == 'D') {
-        rc = istgt_pg_delete(istgt);
-        MTX_LOCK(&istgt->reload_mutex);
-        istgt->pg_reload = rc < 0 ? -1 : 1;
-        rc2 = pthread_cond_broadcast(&istgt->reload_cond);
-        if (rc2 != 0) {
-          ISTGT_ERRLOG("cond_broadcast() failed\n");
-        }
-        MTX_UNLOCK(&istgt->reload_mutex);
-        if (rc < 0) {
-          ISTGT_ERRLOG("pg_delete() failed\n");
-          // break;
-        }
-      }
-      if (tmp[0] == 'U') {
-        rc = istgt_pg_update(istgt);
-        MTX_LOCK(&istgt->reload_mutex);
-        istgt->pg_reload = rc < 0 ? -1 : 1;
-        rc2 = pthread_cond_broadcast(&istgt->reload_cond);
-        if (rc2 != 0) {
-          ISTGT_ERRLOG("cond_broadcast() failed\n");
-        }
-        MTX_UNLOCK(&istgt->reload_mutex);
-        if (rc < 0) {
-          ISTGT_ERRLOG("pg_update() failed\n");
-          // break;
-        }
-      }
-#ifdef ISTGT_USE_KQUEUE
-      close(kq);
-#endif /* ISTGT_USE_KQUEUE */
-      ISTGT_TRACELOG(ISTGT_TRACE_DEBUG, "reload accept loop\n");
-      goto reload;
+
+      abort();  // Invalid command.
     }
   }
 #ifdef ISTGT_USE_KQUEUE
@@ -2103,7 +1300,6 @@ int main(int argc, char** argv) {
   istgt->state = ISTGT_STATE_INVALID;
   istgt->sig_pipe = istgt_control_pipe_init();
   istgt->daemon = 0;
-  istgt->generation = 0;
 
 #if 0
  	while ((ch = getopt(argc, argv, "l:t:qDHV")) != -1) {
@@ -2159,7 +1355,6 @@ int main(int argc, char** argv) {
     exit(EXIT_FAILURE);
   }
   istgt->config = config;
-  istgt->config_old = NULL;
   istgt_print_config(config);
 
 #ifdef ISTGT_USE_KQUEUE

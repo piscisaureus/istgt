@@ -123,8 +123,6 @@ uint64_t istgt_lu_parse_media_size(const char* file,
 PORTAL_GROUP* istgt_lu_find_portalgroup(ISTGT_Ptr istgt, int tag);
 INITIATOR_GROUP* istgt_lu_find_initiatorgroup(ISTGT_Ptr istgt, int tag);
 int istgt_lu_init(ISTGT_Ptr istgt);
-int istgt_lu_reload_delete(ISTGT_Ptr istgt);
-int istgt_lu_reload_update(ISTGT_Ptr istgt);
 int istgt_lu_set_all_state(ISTGT_Ptr istgt, ISTGT_STATE state);
 int istgt_lu_create_threads(ISTGT_Ptr istgt);
 int istgt_lu_shutdown(ISTGT_Ptr istgt);
