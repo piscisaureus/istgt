@@ -1254,10 +1254,7 @@ static int istgt_acceptor(ISTGT_Ptr istgt) {
   return 0;
 }
 
-int main(int argc, char** argv) {
-  UNUSED(argc);
-  UNUSED(argv);
-
+int istgt_start() {
   ISTGT_Ptr istgt;
   CONFIG* config;
   int retry = 10;
@@ -1277,12 +1274,12 @@ int main(int argc, char** argv) {
       config, sizeof CONFIG_FILE / sizeof CONFIG_FILE[0], CONFIG_FILE);
   if (rc < 0) {
     fprintf(stderr, "config error\n");
-    exit(EXIT_FAILURE);
+    return -1;
   }
   if (config->section == NULL) {
     fprintf(stderr, "empty config\n");
     istgt_free_config(config);
-    exit(EXIT_FAILURE);
+    return -1;
   }
   istgt->config = config;
   istgt_print_config(config);
@@ -1311,7 +1308,7 @@ int main(int argc, char** argv) {
     ISTGT_ERRLOG("istgt_init() failed\n");
   initialize_error:
     istgt_free_config(config);
-    exit(EXIT_FAILURE);
+    return -1;
   }
   rc = istgt_lu_init(istgt);
   if (rc < 0) {
@@ -1354,7 +1351,7 @@ int main(int argc, char** argv) {
     config = istgt->config;
     istgt->config = NULL;
     istgt_free_config(config);
-    exit(EXIT_FAILURE);
+    return -1;
   }
 
   /* wait threads */
