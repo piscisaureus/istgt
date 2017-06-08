@@ -34,21 +34,6 @@ static int istgt_lu_disk_close_raw(ISTGT_LU_DISK* spec) {
   return 0;
 }
 
-#if 0
-static off_t
-istgt_lu_disk_lseek_raw(ISTGT_LU_DISK *spec, off_t offset, int whence)
-{
-  off_t rc;
-
-  rc = lseek(spec->fd, offset, whence);
-  if (rc < 0) {
-    return -1;
-  }
-  spec->foffset = offset;
-  return rc;
-}
-#endif
-
 static int64_t istgt_lu_disk_pread_raw(ISTGT_LU_DISK* spec,
                                        void* buf,
                                        uint64_t nbytes,
