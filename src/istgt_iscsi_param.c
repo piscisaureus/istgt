@@ -36,7 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "istgt.h"
+#include "istgt_core.h"
 #include "istgt_iscsi.h"
 #include "istgt_iscsi_param.h"
 #include "istgt_log.h"

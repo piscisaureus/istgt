@@ -25,8 +25,8 @@
  *
  */
 
-#ifndef ISTGT_H
-#define ISTGT_H
+#ifndef ISTGT_CORE_H
+#define ISTGT_CORE_H
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -288,4 +288,4 @@ static inline __attribute__((__always_inline__)) void istgt_set_state(
 }
 #endif /* USE_ATOMIC */
 
-#endif /* ISTGT_H */
+#endif /* ISTGT_CORE_H */

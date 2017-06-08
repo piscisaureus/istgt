@@ -29,8 +29,8 @@
 #define ISTGT_ISCSI_H
 
 #include <stdint.h>
-#include "istgt.h"
 #include "istgt_control_pipe.h"
+#include "istgt_core.h"
 #include "istgt_iscsi_param.h"
 #include "istgt_lu.h"
 #include "istgt_misc.h"

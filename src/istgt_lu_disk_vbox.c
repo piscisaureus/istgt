@@ -39,7 +39,7 @@
 
 #include <fcntl.h>
 
-#include "istgt.h"
+#include "istgt_core.h"
 #include "istgt_log.h"
 #include "istgt_lu.h"
 #include "istgt_misc.h"

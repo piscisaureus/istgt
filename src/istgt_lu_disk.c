@@ -39,8 +39,8 @@
 
 #include <fcntl.h>
 
-#include "istgt.h"
 #include "istgt_conf.h"
+#include "istgt_core.h"
 #include "istgt_crc32c.h"
 #include "istgt_iscsi.h"
 #include "istgt_log.h"

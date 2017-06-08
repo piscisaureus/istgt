@@ -34,8 +34,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "istgt.h"
 #include "istgt_conf.h"
+#include "istgt_core.h"
 #include "istgt_misc.h"
 
 //#define CF_DELIM " \t,;"
